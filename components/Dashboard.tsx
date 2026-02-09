@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { AggregatedSalesData, ManagerSalesData, PersonSalesRow, GoodsSalesRow, BetaMapping, ExpenseRow } from '../types';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, LabelList } from 'recharts';
 import { analyzeSalesData } from '../services/geminiService';
 import { Bot, RefreshCcw, FileText, Banknote, Users, Sparkles, Briefcase, Filter, Printer, Percent } from 'lucide-react';
 
@@ -74,9 +74,6 @@ const Dashboard: React.FC<DashboardProps> = ({
            }
            
            const net = good.netSales || 0;
-           // We assume goodsSales handles the core product logic
-           // Note: Deductions (returns) are already subtracted in netSales in parseGoodsSales, 
-           // but we might want to track them if needed. For now, focus on Net Sales breakdown.
            
            if (good.productCode && good.productCode.toUpperCase().startsWith('TG')) {
               customers[good.buyerName].target += net;
@@ -93,21 +90,17 @@ const Dashboard: React.FC<DashboardProps> = ({
        }
     });
 
-    // 3. Handle Expenses (Deductions per customer if possible, or just note them)
-    // We will allocate expenses to the customer if name matches
+    // 3. Handle Expenses
     expenses.forEach(exp => {
       if (exp.assignedCategory && customerNames.has(exp.executorName)) {
          if (!customers[exp.executorName]) {
-             // Rare case: Expense exists but no goods sales?
              customers[exp.executorName] = { name: exp.executorName, target: 0, beta: 0, other: 0, total: 0, deductions: 0 };
          }
          customers[exp.executorName].deductions += exp.amount;
-         // Note: We don't subtract from target/beta/other here for display simplicity in columns,
-         // but conceptually it reduces the net.
       }
     });
 
-    // Ensure all customers from personSales appear even if no goods (fallback)
+    // Ensure all customers from personSales appear
     repCustomers.forEach(p => {
         if (!customers[p.customerName]) {
             customers[p.customerName] = { 
@@ -490,7 +483,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       {/* --- PRINT VIEW (VISIBLE ONLY ON PRINT) --- */}
-      <div className="hidden print:block bg-white text-black p-0">
+      <div className="hidden print:block bg-white text-black p-4 space-y-6">
          {selectedRep === 'all' ? (
             /* ALL REPS REPORT */
             <div className="space-y-6">
@@ -539,141 +532,109 @@ const Dashboard: React.FC<DashboardProps> = ({
                      </tr>
                   </tfoot>
                </table>
-
-               {/* Managers Table on Print */}
-               {managersData.length > 0 && (
-                  <div className="mt-8 break-inside-avoid">
-                     <h2 className="text-xl font-bold mb-4">پورسانت مدیران</h2>
-                     <table className="w-full text-xs text-right border-collapse border border-black">
-                        <thead>
-                           <tr className="bg-gray-200 font-bold border-b border-black">
-                              <th className="border border-black p-2">نام مدیر</th>
-                              <th className="border border-black p-2">فروش تیم</th>
-                              <th className="border border-black p-2">کسورات تیم</th>
-                              <th className="border border-black p-2 bg-gray-300">پورسانت نهایی</th>
-                           </tr>
-                        </thead>
-                        <tbody>
-                           {managersData.map(mgr => (
-                              <tr key={mgr.managerName} className="border-b border-black">
-                                 <td className="border border-black p-2 font-bold">{mgr.managerName}</td>
-                                 <td className="border border-black p-2">{formatCurrency(mgr.teamTotalTarget + mgr.teamTotalBeta + mgr.teamTotalOther)}</td>
-                                 <td className="border border-black p-2">{formatCurrency(mgr.teamTotalDeductions)}</td>
-                                 <td className="border border-black p-2 font-bold bg-gray-100">{formatCurrency(mgr.commission)}</td>
-                              </tr>
-                           ))}
-                        </tbody>
-                     </table>
-                  </div>
-               )}
             </div>
          ) : (
-            /* SINGLE REP PAYSLIP STYLE */
-            <div className="max-w-[21cm] mx-auto border-4 border-double border-gray-800 p-8 h-[29.7cm] relative">
-               {filteredData.map(row => (
-                  <div key={row.repName} className="h-full flex flex-col justify-between">
-                     <div>
-                        {/* Header */}
-                        <div className="flex justify-between items-end border-b-2 border-black pb-4 mb-8">
-                           <div>
-                              <h1 className="text-2xl font-black mb-1">صورت وضعیت پورسانت فروش</h1>
-                              <p className="text-sm font-bold text-gray-600">شرکت بازرگانی</p>
-                           </div>
-                           <div className="text-left text-sm">
-                              <p>تاریخ: {printDate}</p>
-                              <p className="font-bold mt-1 text-lg">{row.repName}</p>
-                           </div>
-                        </div>
-
-                        {/* Body */}
-                        <div className="space-y-6">
-                           
-                           {/* Section: Target */}
-                           <div className="border border-black rounded-lg overflow-hidden">
-                              <div className="bg-gray-200 px-4 py-2 border-b border-black font-bold flex justify-between">
-                                 <span>1. گروه کالایی تارگت (Target)</span>
-                              </div>
-                              <div className="p-4 grid grid-cols-3 gap-4 text-sm">
-                                 <div>
-                                    <span className="block text-gray-500 text-xs">فروش خالص:</span>
-                                    <span className="font-bold text-lg">{formatCurrency(row.targetSales)}</span>
-                                 </div>
-                                 <div>
-                                    <span className="block text-gray-500 text-xs">کسورات:</span>
-                                    <span className="font-bold text-red-600">{(row.targetDeductions).toLocaleString()} -</span>
-                                 </div>
-                                 <div className="bg-gray-100 p-2 rounded text-center">
-                                    <span className="block text-gray-500 text-xs">پورسانت تعلق گرفته:</span>
-                                    <span className="font-black text-xl">{formatCurrency(row.commissionTarget || 0)}</span>
-                                 </div>
-                              </div>
-                           </div>
-
-                           {/* Section: Beta */}
-                           <div className="border border-black rounded-lg overflow-hidden">
-                              <div className="bg-gray-200 px-4 py-2 border-b border-black font-bold flex justify-between">
-                                 <span>2. گروه کالایی بتا (Beta)</span>
-                              </div>
-                              <div className="p-4 grid grid-cols-3 gap-4 text-sm">
-                                 <div>
-                                    <span className="block text-gray-500 text-xs">فروش خالص:</span>
-                                    <span className="font-bold text-lg">{formatCurrency(row.betaSales)}</span>
-                                 </div>
-                                 <div>
-                                    <span className="block text-gray-500 text-xs">کسورات:</span>
-                                    <span className="font-bold text-red-600">{(row.betaDeductions).toLocaleString()} -</span>
-                                 </div>
-                                 <div className="bg-gray-100 p-2 rounded text-center">
-                                    <span className="block text-gray-500 text-xs">پورسانت تعلق گرفته:</span>
-                                    <span className="font-black text-xl">{formatCurrency(row.commissionBeta || 0)}</span>
-                                 </div>
-                              </div>
-                           </div>
-
-                           {/* Section: Other */}
-                           <div className="border border-black rounded-lg overflow-hidden">
-                              <div className="bg-gray-200 px-4 py-2 border-b border-black font-bold flex justify-between">
-                                 <span>3. سایر اقلام (Other)</span>
-                              </div>
-                              <div className="p-4 grid grid-cols-3 gap-4 text-sm">
-                                 <div>
-                                    <span className="block text-gray-500 text-xs">فروش خالص:</span>
-                                    <span className="font-bold text-lg">{formatCurrency(row.otherSales)}</span>
-                                 </div>
-                                 <div>
-                                    <span className="block text-gray-500 text-xs">کسورات:</span>
-                                    <span className="font-bold text-red-600">{(row.otherDeductions).toLocaleString()} -</span>
-                                 </div>
-                                 <div className="bg-gray-100 p-2 rounded text-center">
-                                    <span className="block text-gray-500 text-xs">پورسانت تعلق گرفته:</span>
-                                    <span className="font-black text-xl">{formatCurrency(row.commissionOther || 0)}</span>
-                                 </div>
-                              </div>
-                           </div>
-
-                           {/* Total Box */}
-                           <div className="mt-8 border-t-2 border-black pt-6 flex justify-between items-center bg-gray-50 p-6 rounded-xl border border-gray-300">
-                               <div className="text-xl font-bold">مبلغ نهایی قابل پرداخت:</div>
-                               <div className="text-3xl font-black">{formatCurrency(row.totalCommission || 0)} <span className="text-sm font-normal text-gray-500">ریال</span></div>
-                           </div>
-
-                        </div>
-                     </div>
-
-                     {/* Signatures */}
-                     <div className="grid grid-cols-3 gap-8 mt-12 mb-4 text-center text-sm">
-                        <div className="border-t border-black pt-2">
-                           <p className="font-bold mb-8">امضاء کارشناس فروش</p>
-                        </div>
-                        <div className="border-t border-black pt-2">
-                           <p className="font-bold mb-8">امضاء مدیر فروش</p>
-                        </div>
-                        <div className="border-t border-black pt-2">
-                           <p className="font-bold mb-8">امضاء امور مالی</p>
-                        </div>
-                     </div>
+            /* SINGLE REP DASHBOARD CLONE FOR PRINT */
+            <div className="space-y-6 font-sans">
+               {/* Header */}
+               <div className="flex justify-between items-end border-b-2 border-gray-800 pb-4">
+                  <div>
+                     <h1 className="text-2xl font-black text-gray-900">گزارش عملکرد و پورسانت فروش</h1>
+                     <p className="text-gray-600 mt-1">کارشناس: <span className="font-bold text-black text-lg">{selectedRep}</span></p>
                   </div>
-               ))}
+                  <div className="text-left text-sm text-gray-500">
+                     <p>تاریخ گزارش: {printDate}</p>
+                     <p className="mt-1 text-xs">واحد مالی و حسابداری</p>
+                  </div>
+               </div>
+
+               {/* Summary Cards */}
+               <div className="grid grid-cols-3 gap-4">
+                  <div className="border border-gray-300 p-4 rounded-xl bg-white">
+                     <div className="text-gray-500 text-xs font-bold mb-1">فروش خالص نهایی</div>
+                     <div className="text-2xl font-black text-gray-900">{formatCurrency(filteredData[0]?.totalNet || 0)} <span className="text-xs font-normal">ریال</span></div>
+                  </div>
+                  <div className="border border-gray-300 p-4 rounded-xl bg-gray-50">
+                     <div className="text-gray-500 text-xs font-bold mb-1">پورسانت نهایی قابل پرداخت</div>
+                     <div className="text-2xl font-black text-blue-800">{formatCurrency(filteredData[0]?.totalCommission || 0)} <span className="text-xs font-normal">ریال</span></div>
+                  </div>
+                  <div className={`border border-gray-300 p-4 rounded-xl`}>
+                     <div className="text-gray-500 text-xs font-bold mb-1">{ThirdCardContent.title}</div>
+                     <div className="text-xl font-bold">{ThirdCardContent.value}</div>
+                  </div>
+               </div>
+
+               {/* Chart Section */}
+               <div className="border border-gray-300 rounded-xl p-4 bg-white">
+                  <h3 className="text-sm font-bold text-gray-700 mb-4 border-b pb-2">نمودار ترکیب فروش (Target / Beta / Other)</h3>
+                  <div style={{ width: '100%', height: '200px' }}>
+                     <ResponsiveContainer>
+                        <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                           <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                           <XAxis type="number" hide />
+                           <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 12, fill: '#000', fontWeight: 'bold'}} />
+                           <Bar dataKey="value" barSize={24} radius={[0, 4, 4, 0]} isAnimationActive={false}>
+                              {chartData.map((entry, index) => (
+                                 <Cell key={`cell-${index}`} fill={entry.fill} />
+                              ))}
+                              <LabelList dataKey="value" position="right" formatter={(val: number) => formatCurrency(val)} fontSize={10} fill="#000" />
+                           </Bar>
+                        </BarChart>
+                     </ResponsiveContainer>
+                  </div>
+               </div>
+
+               {/* Detailed Table */}
+               <div className="border border-gray-300 rounded-xl overflow-hidden mt-4">
+                   <div className="bg-gray-100 px-4 py-2 border-b border-gray-300 font-bold text-sm">ریز عملکرد به تفکیک خریداران</div>
+                   <table className="w-full text-right text-xs whitespace-nowrap">
+                      <thead>
+                        <tr className="bg-gray-50 text-gray-700 border-b border-gray-300">
+                           <th className="p-2 border-r border-gray-200 w-48">نام خریدار</th>
+                           <th className="p-2 border-r border-gray-200 text-center">فروش تارگت</th>
+                           <th className="p-2 border-r border-gray-200 text-center">فروش بتا</th>
+                           <th className="p-2 border-r border-gray-200 text-center">فروش سایر</th>
+                           <th className="p-2 border-r border-gray-200 text-center text-red-600">کسورات</th>
+                           <th className="p-2 text-center font-bold">جمع کل</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                         {customerBreakdown.map((row, idx) => (
+                            <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                               <td className="p-2 border-r border-gray-200 font-bold truncate max-w-[200px]">{row.name}</td>
+                               <td className="p-2 border-r border-gray-200 text-center">{row.target > 0 ? formatCurrency(row.target) : '-'}</td>
+                               <td className="p-2 border-r border-gray-200 text-center">{row.beta > 0 ? formatCurrency(row.beta) : '-'}</td>
+                               <td className="p-2 border-r border-gray-200 text-center">{row.other > 0 ? formatCurrency(row.other) : '-'}</td>
+                               <td className="p-2 border-r border-gray-200 text-center text-red-600">{row.deductions > 0 ? formatCurrency(row.deductions) : '-'}</td>
+                               <td className="p-2 text-center font-bold">{formatCurrency(row.total)}</td>
+                            </tr>
+                         ))}
+                      </tbody>
+                      <tfoot className="bg-gray-200 border-t-2 border-gray-400 font-bold text-black">
+                         <tr>
+                            <td className="p-2 border-r border-gray-400">جمع نهایی</td>
+                            <td className="p-2 border-r border-gray-400 text-center">{formatCurrency(filteredData[0]?.targetSales || 0)}</td>
+                            <td className="p-2 border-r border-gray-400 text-center">{formatCurrency(filteredData[0]?.betaSales || 0)}</td>
+                            <td className="p-2 border-r border-gray-400 text-center">{formatCurrency(filteredData[0]?.otherSales || 0)}</td>
+                            <td className="p-2 border-r border-gray-400 text-center text-red-700">({formatCurrency((filteredData[0]?.targetDeductions + filteredData[0]?.betaDeductions + filteredData[0]?.otherDeductions) || 0)})</td>
+                            <td className="p-2 text-center">{formatCurrency(filteredData[0]?.totalNet || 0)}</td>
+                         </tr>
+                      </tfoot>
+                   </table>
+               </div>
+
+               {/* Signatures */}
+               <div className="grid grid-cols-3 gap-8 mt-12 text-center text-sm pt-12 break-inside-avoid">
+                  <div className="border-t border-black pt-2">
+                     <p className="font-bold">امضاء کارشناس</p>
+                  </div>
+                  <div className="border-t border-black pt-2">
+                     <p className="font-bold">امضاء مدیر فروش</p>
+                  </div>
+                  <div className="border-t border-black pt-2">
+                     <p className="font-bold">امضاء امور مالی</p>
+                  </div>
+               </div>
             </div>
          )}
       </div>

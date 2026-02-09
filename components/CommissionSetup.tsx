@@ -1,7 +1,6 @@
-
 import React, { useState } from 'react';
 import { CommissionProfile, Manager, RepSettings, SalesCategory, CommissionTier } from '../types';
-import { Plus, Trash2, UserPlus, Users, Table, Check, Layers, DollarSign, Percent } from 'lucide-react';
+import { Plus, Trash2, UserPlus, Users, Table, Layers, DollarSign, Percent } from 'lucide-react';
 
 interface CommissionSetupProps {
   profiles: CommissionProfile[];
@@ -55,7 +54,7 @@ const CommissionSetup: React.FC<CommissionSetupProps> = ({
       const newRules = p.rules.map(r => {
         if (r.category !== category) return r;
         const lastMax = r.tiers.length > 0 ? r.tiers[r.tiers.length - 1].max : 0;
-        return { ...r, tiers: [...r.tiers, { min: lastMax + 1, max: lastMax * 10, value: 0, type: 'percent' }] };
+        return { ...r, tiers: [...r.tiers, { min: lastMax + 1, max: lastMax * 10, value: 0, type: 'percent' as const }] };
       });
       return { ...p, rules: newRules };
     }));
