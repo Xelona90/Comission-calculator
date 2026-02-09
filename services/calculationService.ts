@@ -47,11 +47,34 @@ const calculateAmount = (amount: number, tiers: any[]): number => {
   }
 };
 
+// Helper to extract the real beta rep name from the string like "Name (مشتری TargetName)"
+export const extractBetaRepName = (rawSubgroup: string): string => {
+  if (!rawSubgroup) return '';
+  const normalized = rawSubgroup.trim();
+  // Regex to match (مشتری Name) or (مشتری: Name)
+  // Captures the text after "مشتری" inside parentheses
+  const match = normalized.match(/\(\s*مشتری\s*[:]?\s*(.+?)\s*\)/);
+  if (match && match[1]) {
+    return match[1].trim();
+  }
+  return normalized;
+};
+
 const resolveRepName = (rawSubgroup: string, isBeta: boolean, betaMappings: BetaMapping[]): string => {
     if (!isBeta) return rawSubgroup;
-    const mapping = betaMappings.find(m => m.betaSubgroup === rawSubgroup);
-    // If mapped, return the assigned rep. If not, return the raw name (it will show as unassigned in UI)
-    return mapping ? mapping.assignedRepName : rawSubgroup;
+    
+    // 1. Extract the meaningful name (e.g., "امیررضا آجرلو" from "(مشتری امیررضا آجرلو)")
+    const extracted = extractBetaRepName(rawSubgroup);
+    
+    // 2. Check if this extracted name is mapped
+    const mapping = betaMappings.find(m => m.betaSubgroup === extracted);
+    if (mapping) return mapping.assignedRepName;
+
+    // 3. Fallback: Check if the raw string was mapped (legacy support)
+    const exactMapping = betaMappings.find(m => m.betaSubgroup === rawSubgroup);
+    
+    // 4. If no mapping, return the extracted name (so it groups correctly in UI even if unmapped)
+    return exactMapping ? exactMapping.assignedRepName : extracted;
 };
 
 export const aggregateData = (
@@ -115,16 +138,17 @@ export const aggregateData = (
   // 3. Expenses Processing
   expenses.forEach(exp => {
     if (exp.linkedRep && exp.assignedCategory) {
-      // Need to ensure expenses linked to a "Beta Subgroup" name also get redirected to the "Real Rep"
-      // However, linkExpensesToReps is done BEFORE aggregation using raw names in App.tsx. 
-      // So exp.linkedRep might be "Beta Group A". We need to resolve it here too.
-      // But for simplicity, let's assume linkExpensesToReps needs to handle this or we handle it here.
+      // exp.linkedRep is the raw subgroup name from Excel.
+      // We need to resolve it to the Final Rep Name (mapped or extracted)
+      const extracted = extractBetaRepName(exp.linkedRep);
       
-      // Let's resolve it here:
-      // Note: We don't easily know if the linkedRep IS a beta group or not without checking the mapping
-      // Try to find if 'exp.linkedRep' exists in beta mappings
-      const mapping = betaMappings.find(m => m.betaSubgroup === exp.linkedRep);
-      const finalRepName = mapping ? mapping.assignedRepName : exp.linkedRep;
+      const mapping = betaMappings.find(m => m.betaSubgroup === extracted);
+      // Fallback to exact match
+      const exactMapping = betaMappings.find(m => m.betaSubgroup === exp.linkedRep);
+      
+      const finalRepName = mapping 
+          ? mapping.assignedRepName 
+          : (exactMapping ? exactMapping.assignedRepName : extracted);
 
       const repStats = repData.get(finalRepName);
       if (repStats) {
