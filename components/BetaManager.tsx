@@ -2,6 +2,7 @@
 import React, { useMemo } from 'react';
 import { PersonSalesRow, BetaMapping } from '../types';
 import { Share2, AlertCircle, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { extractBetaRepName } from '../services/calculationService';
 
 interface BetaManagerProps {
   personSales: PersonSalesRow[];
@@ -11,19 +12,20 @@ interface BetaManagerProps {
 
 const BetaManager: React.FC<BetaManagerProps> = ({ personSales, betaMappings, setBetaMappings }) => {
   
-  // 1. Identify all unique rows that are flagged as Beta
+  // 1. Identify all unique Beta Groups based on the extracted name in parentheses
   const betaSubgroups = useMemo(() => {
     const set = new Set<string>();
     personSales.forEach(p => {
       if (p.isBeta && p.subgroup) {
-        set.add(p.subgroup);
+        // Use the extracted name (e.g. "امیررضا آجرلو") instead of the full string
+        const extracted = extractBetaRepName(p.subgroup);
+        set.add(extracted);
       }
     });
     return Array.from(set);
   }, [personSales]);
 
   // 2. Identify "Real Reps" (Non-beta subgroups) to populate the dropdown
-  // We assume any subgroup NOT marked as Beta is a potential Sales Rep.
   const realReps = useMemo(() => {
     const set = new Set<string>();
     personSales.forEach(p => {
@@ -64,9 +66,9 @@ const BetaManager: React.FC<BetaManagerProps> = ({ personSales, betaMappings, se
          <div className="flex-1">
             <h3 className="font-bold text-lg text-pink-900">تخصیص مشتریان گروه بتا</h3>
             <p className="text-sm text-pink-800 mt-1 leading-relaxed">
-               برخی رکوردها در اکسل با عنوان "گروه بتا" یا مشابه آن ثبت شده‌اند (مثلا: {betaSubgroups[0] || 'گروه بتا...'}).
+               سیستم به صورت خودکار نام کارشناسان بتا را از داخل پرانتز (مثلا: مشتری امیررضا آجرلو) استخراج کرده است.
                <br/>
-               لطفاً مشخص کنید این گروه‌ها متعلق به کدام کارشناس فروش هستند تا پورسانت آنها صحیح محاسبه شود.
+               لطفاً مشخص کنید این اسامی استخراج شده به کدام کارشناس فروش اصلی تعلق دارند.
             </p>
          </div>
          <div className="text-center bg-white px-4 py-2 rounded-lg border border-pink-100 shadow-sm">
@@ -77,7 +79,7 @@ const BetaManager: React.FC<BetaManagerProps> = ({ personSales, betaMappings, se
 
       <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
          <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-            <h4 className="font-bold text-gray-700">لیست گروه‌های بتا</h4>
+            <h4 className="font-bold text-gray-700">لیست گروه‌های بتا (استخراج شده)</h4>
             {unassignedCount > 0 ? (
                <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 animate-pulse">
                   <AlertCircle size={14} />
@@ -99,9 +101,9 @@ const BetaManager: React.FC<BetaManagerProps> = ({ personSales, betaMappings, se
              <table className="w-full text-right text-sm">
                <thead className="bg-gray-50 text-gray-500 border-b border-gray-200">
                   <tr>
-                     <th className="p-4 w-1/2">نام گروه در اکسل (زیرگروه)</th>
+                     <th className="p-4 w-1/2">نام استخراج شده (از داخل پرانتز)</th>
                      <th className="p-4 w-12 text-center text-gray-300"><ArrowLeft size={16} /></th>
-                     <th className="p-4 w-1/2">تخصیص به کارشناس فروش</th>
+                     <th className="p-4 w-1/2">تخصیص به کارشناس فروش اصلی</th>
                   </tr>
                </thead>
                <tbody className="divide-y divide-gray-100">

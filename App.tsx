@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { AppState, SalesCategory, ExpenseRow, ManualDeduction } from './types';
 import { DEFAULT_COMMISSION_PROFILES } from './constants';
 import { parsePersonSales, parseGoodsSales, parseExpenses } from './services/csvParser';
-import { aggregateData, linkExpensesToReps, calculateManagerCommissions } from './services/calculationService';
+import { aggregateData, linkExpensesToReps, calculateManagerCommissions, extractBetaRepName } from './services/calculationService';
 import { loadConfiguration, saveConfiguration } from './services/dataService';
 import FileUpload from './components/FileUpload';
 import ExpenseManager from './components/ExpenseManager';
@@ -138,7 +138,13 @@ const App: React.FC = () => {
   
   // Calculate unassigned Beta groups
   const unassignedBetaCount = useMemo(() => {
-     const betaGroups = new Set(state.personSales.filter(p => p.isBeta && p.subgroup).map(p => p.subgroup));
+     // Get unique EXTRACTED names instead of raw subgroups
+     const betaGroups = new Set(
+        state.personSales
+           .filter(p => p.isBeta && p.subgroup)
+           .map(p => extractBetaRepName(p.subgroup))
+     );
+     
      let count = 0;
      betaGroups.forEach(bg => {
         if (!state.betaMappings.find(m => m.betaSubgroup === bg)) count++;
