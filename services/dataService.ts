@@ -1,44 +1,24 @@
 
 import { CommissionProfile, Manager, RepSettings, BetaMapping } from '../types';
 
-// In a real application, replace these with actual API endpoints
-// e.g., const API_URL = 'https://your-backend.com/api';
-
-const STORAGE_KEYS = {
-  PROFILES: 'commission_app_profiles',
-  MANAGERS: 'commission_app_managers',
-  REP_SETTINGS: 'commission_app_rep_settings',
-  BETA_MAPPINGS: 'commission_app_beta_mappings'
-};
-
 export const saveConfiguration = async (
   profiles: CommissionProfile[],
   managers: Manager[],
   repSettings: RepSettings[],
-  betaMappings: BetaMapping[] = [] // Added argument
+  betaMappings: BetaMapping[] = [] 
 ): Promise<boolean> => {
   try {
-    console.log("Saving to database...");
-    
-    // --- REAL API IMPLEMENTATION EXAMPLE ---
-    /*
-    await fetch('/api/save-config', {
+    const response = await fetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ profiles, managers, repSettings, betaMappings })
     });
-    */
 
-    // --- LOCAL STORAGE MOCK IMPLEMENTATION ---
-    localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(profiles));
-    localStorage.setItem(STORAGE_KEYS.MANAGERS, JSON.stringify(managers));
-    localStorage.setItem(STORAGE_KEYS.REP_SETTINGS, JSON.stringify(repSettings));
-    localStorage.setItem(STORAGE_KEYS.BETA_MAPPINGS, JSON.stringify(betaMappings));
-    
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    console.log("Saved successfully.");
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.statusText}`);
+    }
+
+    console.log("Configuration saved successfully to database.");
     return true;
   } catch (error) {
     console.error("Failed to save configuration:", error);
@@ -53,27 +33,23 @@ export const loadConfiguration = async (): Promise<{
   betaMappings: BetaMapping[] | null
 }> => {
   try {
-    // --- REAL API IMPLEMENTATION EXAMPLE ---
-    /*
-    const response = await fetch('/api/get-config');
+    const response = await fetch('/api/config');
+    
+    if (!response.ok) {
+      // If server is not ready or returns 404/500, fallback or throw
+      throw new Error(`API Error: ${response.statusText}`);
+    }
+
     const data = await response.json();
-    return data; 
-    */
-
-    // --- LOCAL STORAGE MOCK IMPLEMENTATION ---
-    const profilesStr = localStorage.getItem(STORAGE_KEYS.PROFILES);
-    const managersStr = localStorage.getItem(STORAGE_KEYS.MANAGERS);
-    const repSettingsStr = localStorage.getItem(STORAGE_KEYS.REP_SETTINGS);
-    const betaMappingsStr = localStorage.getItem(STORAGE_KEYS.BETA_MAPPINGS);
-
+    
     return {
-      profiles: profilesStr ? JSON.parse(profilesStr) : null,
-      managers: managersStr ? JSON.parse(managersStr) : null,
-      repSettings: repSettingsStr ? JSON.parse(repSettingsStr) : null,
-      betaMappings: betaMappingsStr ? JSON.parse(betaMappingsStr) : null
+      profiles: data.profiles || null,
+      managers: data.managers || null,
+      repSettings: data.repSettings || null,
+      betaMappings: data.betaMappings || null
     };
   } catch (error) {
-    console.error("Failed to load configuration:", error);
+    console.error("Failed to load configuration from API:", error);
     return { profiles: null, managers: null, repSettings: null, betaMappings: null };
   }
 };
