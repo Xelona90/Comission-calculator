@@ -155,19 +155,28 @@ export const aggregateData = (
   // 3. Expenses Processing
   expenses.forEach(exp => {
     if (exp.linkedRep && exp.assignedCategory) {
-      // exp.linkedRep is the raw subgroup name from Excel.
-      // We need to resolve it to the Final Rep Name (mapped or extracted)
-      const extracted = extractBetaRepName(exp.linkedRep);
+      // FIX: First try to match the linkedRep exactly. 
+      // This is crucial for Reps that are NOT marked as Beta but have complex names.
+      // Previously, we always ran extractBetaRepName which altered names like "Group B4 (Solhi)" to "Solhi",
+      // causing a mismatch if the rep was stored as "Group B4 (Solhi)" in repData.
       
-      const mapping = betaMappings.find(m => m.betaSubgroup === extracted);
-      // Fallback to exact match
-      const exactMapping = betaMappings.find(m => m.betaSubgroup === exp.linkedRep);
-      
-      const finalRepName = mapping 
-          ? mapping.assignedRepName 
-          : (exactMapping ? exactMapping.assignedRepName : extracted);
+      let repStats = repData.get(exp.linkedRep);
 
-      const repStats = repData.get(finalRepName);
+      // If exact match fails, THEN try the complex resolution logic (for Beta scenarios)
+      if (!repStats) {
+        const extracted = extractBetaRepName(exp.linkedRep);
+        
+        const mapping = betaMappings.find(m => m.betaSubgroup === extracted);
+        // Fallback to exact match
+        const exactMapping = betaMappings.find(m => m.betaSubgroup === exp.linkedRep);
+        
+        const finalRepName = mapping 
+            ? mapping.assignedRepName 
+            : (exactMapping ? exactMapping.assignedRepName : extracted);
+        
+        repStats = repData.get(finalRepName);
+      }
+
       if (repStats) {
         const amt = exp.amount || 0;
         if (exp.assignedCategory === SalesCategory.TARGET) repStats.targetDeductions += amt;
