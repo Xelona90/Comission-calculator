@@ -43,7 +43,8 @@ export const DEFAULT_COMMISSION_PROFILES: CommissionProfile[] = [
         ]
       },
       { category: SalesCategory.BETA, tiers: [] },
-      { category: SalesCategory.OTHER, tiers: [] }
+      { category: SalesCategory.OTHER, tiers: [] },
+      { category: SalesCategory.TOTAL, tiers: [] }
     ]
   },
   {
@@ -59,7 +60,8 @@ export const DEFAULT_COMMISSION_PROFILES: CommissionProfile[] = [
         ]
       },
       { category: SalesCategory.BETA, tiers: [] },
-      { category: SalesCategory.OTHER, tiers: [] }
+      { category: SalesCategory.OTHER, tiers: [] },
+      { category: SalesCategory.TOTAL, tiers: [] }
     ]
   },
   {
@@ -75,7 +77,8 @@ export const DEFAULT_COMMISSION_PROFILES: CommissionProfile[] = [
         ]
       },
       { category: SalesCategory.BETA, tiers: [] },
-      { category: SalesCategory.OTHER, tiers: [] }
+      { category: SalesCategory.OTHER, tiers: [] },
+      { category: SalesCategory.TOTAL, tiers: [] }
     ]
   },
   {
@@ -92,7 +95,8 @@ export const DEFAULT_COMMISSION_PROFILES: CommissionProfile[] = [
         ]
       },
       { category: SalesCategory.BETA, tiers: [] },
-      { category: SalesCategory.OTHER, tiers: [] }
+      { category: SalesCategory.OTHER, tiers: [] },
+      { category: SalesCategory.TOTAL, tiers: [] }
     ]
   },
   {
@@ -106,7 +110,8 @@ export const DEFAULT_COMMISSION_PROFILES: CommissionProfile[] = [
         ]
       },
       { category: SalesCategory.BETA, tiers: [] },
-      { category: SalesCategory.OTHER, tiers: [] }
+      { category: SalesCategory.OTHER, tiers: [] },
+      { category: SalesCategory.TOTAL, tiers: [] }
     ]
   },
   {
@@ -122,7 +127,8 @@ export const DEFAULT_COMMISSION_PROFILES: CommissionProfile[] = [
         ]
       },
       { category: SalesCategory.BETA, tiers: [] },
-      { category: SalesCategory.OTHER, tiers: [] }
+      { category: SalesCategory.OTHER, tiers: [] },
+      { category: SalesCategory.TOTAL, tiers: [] }
     ]
   },
   {
@@ -138,7 +144,8 @@ export const DEFAULT_COMMISSION_PROFILES: CommissionProfile[] = [
           { min: 100_000_000_000, max: 300_000_000_000, value: 0.2, type: 'percent' },
           { min: 300_000_000_000, max: 3_000_000_000_000, value: 0.3, type: 'percent' },
         ]
-      }
+      },
+      { category: SalesCategory.TOTAL, tiers: [] }
     ]
   },
   {
@@ -155,7 +162,8 @@ export const DEFAULT_COMMISSION_PROFILES: CommissionProfile[] = [
           { min: 100_000_000_000, max: 150_000_000_000, value: 0.5, type: 'percent' },
           { min: 150_000_000_000, max: 1_500_000_000_000, value: 0.6, type: 'percent' },
         ]
-      }
+      },
+      { category: SalesCategory.TOTAL, tiers: [] }
     ]
   },
   {
@@ -171,7 +179,8 @@ export const DEFAULT_COMMISSION_PROFILES: CommissionProfile[] = [
           { min: 60_000_000_000, max: 100_000_000_000, value: 40_000_000, type: 'fixed' },
           { min: 100_000_000_000, max: 1_000_000_000_000, value: 60_000_000, type: 'fixed' },
         ]
-      }
+      },
+      { category: SalesCategory.TOTAL, tiers: [] }
     ]
   }
 ];

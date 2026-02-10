@@ -2,7 +2,8 @@
 export enum SalesCategory {
   TARGET = 'Target (TG)',
   BETA = 'Beta',
-  OTHER = 'Other'
+  OTHER = 'Other',
+  TOTAL = 'Total (All Categories)' // New Category for Total Volume
 }
 
 export interface PersonSalesRow {
@@ -45,7 +46,7 @@ export interface CategoryRule {
 export interface CommissionProfile {
   id: string;
   name: string; // e.g. "کارشناس فروش تهران", "مدیر فروش"
-  rules: CategoryRule[]; // Rules for Target, Beta, Other
+  rules: CategoryRule[]; // Rules for Target, Beta, Other, Total
 }
 
 export interface Manager {
@@ -81,6 +82,7 @@ export interface AggregatedSalesData {
   commissionTarget?: number;
   commissionBeta?: number;
   commissionOther?: number;
+  commissionTotal?: number; // New field for bonus on total volume
   totalCommission?: number;
 }
 

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { CommissionProfile, Manager, RepSettings, SalesCategory, CommissionTier } from '../types';
 import { Plus, Trash2, UserPlus, Users, Table, Layers, DollarSign, Percent } from 'lucide-react';
@@ -26,6 +27,7 @@ const CommissionSetup: React.FC<CommissionSetupProps> = ({
         { category: SalesCategory.TARGET, tiers: [{ min: 0, max: 100000000000, value: 0, type: 'percent' }] },
         { category: SalesCategory.BETA, tiers: [{ min: 0, max: 100000000000, value: 0, type: 'percent' }] },
         { category: SalesCategory.OTHER, tiers: [{ min: 0, max: 100000000000, value: 0, type: 'percent' }] },
+        { category: SalesCategory.TOTAL, tiers: [{ min: 0, max: 100000000000, value: 0, type: 'percent' }] },
       ]
     };
     setProfiles([...profiles, newProfile]);
@@ -38,6 +40,18 @@ const CommissionSetup: React.FC<CommissionSetupProps> = ({
   const updateTier = (profileId: string, category: SalesCategory, tierIndex: number, field: keyof CommissionTier, value: any) => {
     setProfiles(profiles.map(p => {
       if (p.id !== profileId) return p;
+      // If rule doesn't exist, we must add it first (rare case if existing data lacks new enum)
+      const existingRule = p.rules.find(r => r.category === category);
+      if (!existingRule) {
+         return {
+            ...p,
+            rules: [...p.rules, {
+               category,
+               tiers: [{ min: 0, max: 0, value: 0, type: 'percent' }] // Initialize with one empty tier
+            }]
+         };
+      }
+
       const newRules = p.rules.map(r => {
         if (r.category !== category) return r;
         const newTiers = [...r.tiers];
@@ -51,6 +65,19 @@ const CommissionSetup: React.FC<CommissionSetupProps> = ({
   const addTier = (profileId: string, category: SalesCategory) => {
     setProfiles(profiles.map(p => {
       if (p.id !== profileId) return p;
+      
+      const existingRule = p.rules.find(r => r.category === category);
+      // Handle missing rule case
+      if (!existingRule) {
+         return {
+            ...p,
+            rules: [...p.rules, {
+               category,
+               tiers: [{ min: 0, max: 100000000, value: 0, type: 'percent' }] 
+            }]
+         };
+      }
+
       const newRules = p.rules.map(r => {
         if (r.category !== category) return r;
         const lastMax = r.tiers.length > 0 ? r.tiers[r.tiers.length - 1].max : 0;
@@ -70,6 +97,29 @@ const CommissionSetup: React.FC<CommissionSetupProps> = ({
       return { ...p, rules: newRules };
     }));
   };
+
+  const getCategoryLabel = (cat: SalesCategory) => {
+     switch(cat) {
+        case SalesCategory.TARGET: return 'تارگت (Target)';
+        case SalesCategory.BETA: return 'بتا (Beta)';
+        case SalesCategory.OTHER: return 'سایر (Other)';
+        case SalesCategory.TOTAL: return 'مجموع کل فروش (Total)';
+        default: return cat;
+     }
+  };
+
+  const getCategoryColor = (cat: SalesCategory) => {
+    switch(cat) {
+       case SalesCategory.TARGET: return 'bg-blue-100 text-blue-800';
+       case SalesCategory.BETA: return 'bg-pink-100 text-pink-800';
+       case SalesCategory.OTHER: return 'bg-teal-100 text-teal-800';
+       case SalesCategory.TOTAL: return 'bg-indigo-100 text-indigo-800';
+       default: return 'bg-gray-100 text-gray-800';
+    }
+ };
+
+  // Define the order of categories to display
+  const categoryOrder = [SalesCategory.TARGET, SalesCategory.BETA, SalesCategory.OTHER, SalesCategory.TOTAL];
 
   // --- Hierarchy Logic ---
   const addManager = () => {
@@ -158,83 +208,91 @@ const CommissionSetup: React.FC<CommissionSetupProps> = ({
                    </button>
                 </div>
                 
-                <div className="p-6 grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6">
-                   {profile.rules.map(rule => (
-                     <div key={rule.category} className="border border-gray-200 rounded-xl p-4 bg-gray-50/30">
+                <div className="p-6 grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-2 gap-6">
+                   {categoryOrder.map(cat => {
+                     // Find existing rule or use empty fallback for rendering safety
+                     const rule = profile.rules.find(r => r.category === cat) || { category: cat, tiers: [] };
+                     
+                     return (
+                     <div key={cat} className={`border border-gray-200 rounded-xl p-4 ${cat === SalesCategory.TOTAL ? 'bg-indigo-50/40 border-indigo-100 ring-1 ring-indigo-50' : 'bg-gray-50/30'}`}>
                         <div className="flex justify-between items-center mb-4">
-                           <span className={`font-bold px-3 py-1 rounded text-xs
-                              ${rule.category === SalesCategory.TARGET ? 'bg-blue-100 text-blue-800' : 
-                                rule.category === SalesCategory.BETA ? 'bg-pink-100 text-pink-800' : 
-                                'bg-teal-100 text-teal-800'}
-                           `}>{rule.category}</span>
-                           <button onClick={() => addTier(profile.id, rule.category)} className="text-xs text-blue-600 hover:underline font-medium">+ افزودن پله</button>
+                           <span className={`font-bold px-3 py-1 rounded text-xs ${getCategoryColor(cat)}`}>
+                              {getCategoryLabel(cat)}
+                           </span>
+                           <button onClick={() => addTier(profile.id, cat)} className="text-xs text-blue-600 hover:underline font-medium">+ افزودن پله</button>
                         </div>
                         <div className="space-y-2">
-                           <div className="flex text-[10px] text-gray-400 font-bold px-1 mb-1 items-center">
-                              <span className="w-28 text-center">از مبلغ (ریال)</span>
-                              <span className="w-4"></span>
-                              <span className="w-28 text-center">تا مبلغ (ریال)</span>
-                              <span className="w-4"></span>
-                              <span className="w-16 text-center">نوع</span>
-                              <span className="w-2"></span>
-                              <span className="w-20 text-center">مقدار</span>
-                           </div>
-                           {rule.tiers.map((tier, idx) => (
-                             <div key={idx} className="flex items-center gap-1 text-xs">
-                               <input 
-                                 type="number" 
-                                 value={tier.min}
-                                 onChange={(e) => updateTier(profile.id, rule.category, idx, 'min', Number(e.target.value))}
-                                 className="w-28 p-1.5 border border-gray-300 bg-white text-gray-900 rounded text-center focus:border-blue-500 outline-none"
-                               />
-                               <span className="text-gray-300">-</span>
-                               <input 
-                                 type="number" 
-                                 value={tier.max}
-                                 onChange={(e) => updateTier(profile.id, rule.category, idx, 'max', Number(e.target.value))}
-                                 className="w-28 p-1.5 border border-gray-300 bg-white text-gray-900 rounded text-center focus:border-blue-500 outline-none"
-                               />
-                               
-                               <span className="w-2"></span>
-                               
-                               <div className="flex bg-white border border-gray-300 rounded overflow-hidden">
-                                  <button 
-                                    onClick={() => updateTier(profile.id, rule.category, idx, 'type', 'percent')}
-                                    className={`px-1.5 py-1 ${tier.type === 'percent' ? 'bg-blue-100 text-blue-700' : 'text-gray-400 hover:bg-gray-50'}`}
-                                    title="درصد"
-                                  >
-                                    <Percent size={12} />
-                                  </button>
-                                  <div className="w-[1px] bg-gray-200"></div>
-                                  <button 
-                                    onClick={() => updateTier(profile.id, rule.category, idx, 'type', 'fixed')}
-                                    className={`px-1.5 py-1 ${tier.type === 'fixed' ? 'bg-green-100 text-green-700' : 'text-gray-400 hover:bg-gray-50'}`}
-                                    title="مبلغ ثابت"
-                                  >
-                                    <DollarSign size={12} />
-                                  </button>
-                               </div>
+                           {rule.tiers.length === 0 ? (
+                              <p className="text-xs text-gray-400 text-center py-4">بدون قانون محاسبه</p>
+                           ) : (
+                              <>
+                                 <div className="flex text-[10px] text-gray-400 font-bold px-1 mb-1 items-center">
+                                    <span className="w-28 text-center">از مبلغ (ریال)</span>
+                                    <span className="w-4"></span>
+                                    <span className="w-28 text-center">تا مبلغ (ریال)</span>
+                                    <span className="w-4"></span>
+                                    <span className="w-16 text-center">نوع</span>
+                                    <span className="w-2"></span>
+                                    <span className="w-20 text-center">مقدار</span>
+                                 </div>
+                                 {rule.tiers.map((tier, idx) => (
+                                    <div key={idx} className="flex items-center gap-1 text-xs">
+                                       <input 
+                                       type="number" 
+                                       value={tier.min}
+                                       onChange={(e) => updateTier(profile.id, cat, idx, 'min', Number(e.target.value))}
+                                       className="w-28 p-1.5 border border-gray-300 bg-white text-gray-900 rounded text-center focus:border-blue-500 outline-none"
+                                       />
+                                       <span className="text-gray-300">-</span>
+                                       <input 
+                                       type="number" 
+                                       value={tier.max}
+                                       onChange={(e) => updateTier(profile.id, cat, idx, 'max', Number(e.target.value))}
+                                       className="w-28 p-1.5 border border-gray-300 bg-white text-gray-900 rounded text-center focus:border-blue-500 outline-none"
+                                       />
+                                       
+                                       <span className="w-2"></span>
+                                       
+                                       <div className="flex bg-white border border-gray-300 rounded overflow-hidden">
+                                          <button 
+                                          onClick={() => updateTier(profile.id, cat, idx, 'type', 'percent')}
+                                          className={`px-1.5 py-1 ${tier.type === 'percent' ? 'bg-blue-100 text-blue-700' : 'text-gray-400 hover:bg-gray-50'}`}
+                                          title="درصد"
+                                          >
+                                          <Percent size={12} />
+                                          </button>
+                                          <div className="w-[1px] bg-gray-200"></div>
+                                          <button 
+                                          onClick={() => updateTier(profile.id, cat, idx, 'type', 'fixed')}
+                                          className={`px-1.5 py-1 ${tier.type === 'fixed' ? 'bg-green-100 text-green-700' : 'text-gray-400 hover:bg-gray-50'}`}
+                                          title="مبلغ ثابت"
+                                          >
+                                          <DollarSign size={12} />
+                                          </button>
+                                       </div>
 
-                               <span className="text-gray-300">=</span>
-                               
-                               <input 
-                                 type="number" 
-                                 value={tier.value}
-                                 onChange={(e) => updateTier(profile.id, rule.category, idx, 'value', Number(e.target.value))}
-                                 className={`w-20 p-1.5 border rounded text-center font-bold focus:border-blue-500 outline-none
-                                   ${tier.type === 'percent' ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-green-200 bg-green-50 text-green-700'}
-                                 `}
-                                 placeholder={tier.type === 'percent' ? '0.5' : '1000000'}
-                               />
-                               
-                               <button onClick={() => removeTier(profile.id, rule.category, idx)} className="text-gray-300 hover:text-red-500 px-1">
-                                  <Trash2 size={12} />
-                               </button>
-                             </div>
-                           ))}
+                                       <span className="text-gray-300">=</span>
+                                       
+                                       <input 
+                                       type="number" 
+                                       value={tier.value}
+                                       onChange={(e) => updateTier(profile.id, cat, idx, 'value', Number(e.target.value))}
+                                       className={`w-20 p-1.5 border rounded text-center font-bold focus:border-blue-500 outline-none
+                                          ${tier.type === 'percent' ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-green-200 bg-green-50 text-green-700'}
+                                       `}
+                                       placeholder={tier.type === 'percent' ? '0.5' : '1000000'}
+                                       />
+                                       
+                                       <button onClick={() => removeTier(profile.id, cat, idx)} className="text-gray-300 hover:text-red-500 px-1">
+                                          <Trash2 size={12} />
+                                       </button>
+                                    </div>
+                                 ))}
+                              </>
+                           )}
                         </div>
                      </div>
-                   ))}
+                   )})}
                 </div>
               </div>
             ))}
