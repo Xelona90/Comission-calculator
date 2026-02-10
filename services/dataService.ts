@@ -7,6 +7,17 @@ export const saveConfiguration = async (
   repSettings: RepSettings[],
   betaMappings: BetaMapping[] = [] 
 ): Promise<boolean> => {
+  // Always save to LocalStorage as a cache/backup
+  try {
+    localStorage.setItem('commission_profiles', JSON.stringify(profiles));
+    localStorage.setItem('managers', JSON.stringify(managers));
+    localStorage.setItem('rep_settings', JSON.stringify(repSettings));
+    localStorage.setItem('beta_mappings', JSON.stringify(betaMappings));
+    console.log("Configuration cached to LocalStorage.");
+  } catch (e) {
+    console.warn("Failed to write to LocalStorage", e);
+  }
+
   try {
     const response = await fetch('/api/config', {
       method: 'POST',
@@ -15,13 +26,15 @@ export const saveConfiguration = async (
     });
 
     if (!response.ok) {
-      throw new Error(`API Error: ${response.statusText}`);
+      console.warn(`API Save Failed: ${response.status} ${response.statusText}`);
+      // We already saved to LocalStorage above, so we just return false to indicate DB sync failed
+      return false; 
     }
 
     console.log("Configuration saved successfully to database.");
     return true;
   } catch (error) {
-    console.error("Failed to save configuration:", error);
+    console.error("Failed to save configuration to API (Network Error), using LocalStorage cache:", error);
     return false;
   }
 };
@@ -33,23 +46,40 @@ export const loadConfiguration = async (): Promise<{
   betaMappings: BetaMapping[] | null
 }> => {
   try {
+    // Try to load from API
     const response = await fetch('/api/config');
     
-    if (!response.ok) {
-      // If server is not ready or returns 404/500, fallback or throw
-      throw new Error(`API Error: ${response.statusText}`);
-    }
+    if (response.ok) {
+       const data = await response.json();
+       // If API returns data, update LocalStorage cache to keep it in sync
+       if (data.profiles) localStorage.setItem('commission_profiles', JSON.stringify(data.profiles));
+       if (data.managers) localStorage.setItem('managers', JSON.stringify(data.managers));
+       if (data.repSettings) localStorage.setItem('rep_settings', JSON.stringify(data.repSettings));
+       if (data.betaMappings) localStorage.setItem('beta_mappings', JSON.stringify(data.betaMappings));
 
-    const data = await response.json();
-    
-    return {
-      profiles: data.profiles || null,
-      managers: data.managers || null,
-      repSettings: data.repSettings || null,
-      betaMappings: data.betaMappings || null
-    };
+       return {
+         profiles: data.profiles || null,
+         managers: data.managers || null,
+         repSettings: data.repSettings || null,
+         betaMappings: data.betaMappings || null
+       };
+    } else {
+       console.warn(`API not available (${response.status}), loading from LocalStorage`);
+       throw new Error(response.statusText);
+    }
   } catch (error) {
-    console.error("Failed to load configuration from API:", error);
-    return { profiles: null, managers: null, repSettings: null, betaMappings: null };
+    console.log("Loading local configuration (Offline/Fallback Mode)");
+    // Fallback to LocalStorage
+    const p = localStorage.getItem('commission_profiles');
+    const m = localStorage.getItem('managers');
+    const r = localStorage.getItem('rep_settings');
+    const b = localStorage.getItem('beta_mappings');
+
+    return { 
+       profiles: p ? JSON.parse(p) : null, 
+       managers: m ? JSON.parse(m) : null, 
+       repSettings: r ? JSON.parse(r) : null,
+       betaMappings: b ? JSON.parse(b) : null
+    };
   }
 };
