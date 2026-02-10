@@ -18,7 +18,7 @@
     "lucide-react": "^0.344.0",
     "recharts": "^2.12.2",
     "xlsx": "^0.18.5",
-    "@google/genai": "^0.1.0"
+    "@google/genai": "*"
   },
   "engines": {
     "node": ">=18.0.0"
