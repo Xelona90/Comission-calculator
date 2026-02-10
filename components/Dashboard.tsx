@@ -459,7 +459,10 @@ const Dashboard: React.FC<DashboardProps> = ({
                         <td className="p-4 text-red-400 bg-emerald-50/5 group-hover:bg-emerald-50/20">{row.otherDeductions > 0 ? `(${formatCurrency(row.otherDeductions)})` : '-'}</td>
                         <td className="p-4 text-emerald-700 font-bold bg-emerald-50/20 group-hover:bg-emerald-50/40 border-l border-emerald-100">{formatCurrency(row.commissionOther || 0)}</td>
 
-                        <td className="p-4 text-gray-900 font-black text-base bg-gray-50 sticky left-0 group-hover:bg-gray-100 shadow-sm">{formatCurrency(row.totalCommission || 0)}</td>
+                        <td className="p-4 text-gray-900 font-black text-base bg-gray-50 sticky left-0 group-hover:bg-gray-100 shadow-sm">
+                           {formatCurrency(row.totalCommission || 0)}
+                           {(row.commissionTotal || 0) > 0 && <span className="block text-[10px] text-indigo-500 font-normal">+ پاداش حجم</span>}
+                        </td>
                      </tr>
                   ))}
 
@@ -508,6 +511,17 @@ const Dashboard: React.FC<DashboardProps> = ({
 
                             <td className="p-4 text-gray-900 text-lg sticky left-0 bg-gray-200 shadow-sm">{formatCurrency(filteredData[0].totalCommission || 0)}</td>
                         </tr>
+                        {/* New Row for Total Volume Bonus if exists */}
+                        {(filteredData[0].commissionTotal || 0) > 0 && (
+                           <tr className="bg-indigo-50 border-t border-indigo-200 text-indigo-900">
+                              <td colSpan={10} className="p-4 text-right font-bold sticky right-0">
+                                 پاداش حجم فروش کل (تارگت + بتا + سایر) - محاسبه شده بر اساس {formatCurrency(filteredData[0].totalNet)} ریال
+                              </td>
+                              <td className="p-4 font-black text-indigo-700 bg-indigo-100 sticky left-0 shadow-sm border-l-4 border-indigo-500">
+                                 +{formatCurrency(filteredData[0].commissionTotal || 0)}
+                              </td>
+                           </tr>
+                        )}
                      </tfoot>
                   )}
                </table>
@@ -548,7 +562,10 @@ const Dashboard: React.FC<DashboardProps> = ({
                            <td className="border border-black p-2">{formatCurrency(row.commissionBeta || 0)}</td>
                            <td className="border border-black p-2">{formatCurrency(row.otherSales - row.otherDeductions)}</td>
                            <td className="border border-black p-2">{formatCurrency(row.commissionOther || 0)}</td>
-                           <td className="border border-black p-2 font-bold bg-gray-100">{formatCurrency(row.totalCommission || 0)}</td>
+                           <td className="border border-black p-2 font-bold bg-gray-100">
+                              {formatCurrency(row.totalCommission || 0)}
+                              {(row.commissionTotal || 0) > 0 && <span className="block text-[8px]">+ پاداش حجم</span>}
+                           </td>
                         </tr>
                      ))}
                   </tbody>
@@ -655,6 +672,17 @@ const Dashboard: React.FC<DashboardProps> = ({
                             <td className="p-2 border-r border-gray-400 text-center text-red-700">({formatCurrency((filteredData[0]?.targetDeductions + filteredData[0]?.betaDeductions + filteredData[0]?.otherDeductions) || 0)})</td>
                             <td className="p-2 text-center">{formatCurrency(filteredData[0]?.totalNet || 0)}</td>
                          </tr>
+                         {/* Print Footer: Total Volume Bonus */}
+                         {(filteredData[0]?.commissionTotal || 0) > 0 && (
+                            <tr className="bg-gray-300">
+                               <td colSpan={5} className="p-2 border-r border-gray-400 text-right">
+                                  + پاداش حجم فروش کل (تارگت + بتا + سایر)
+                               </td>
+                               <td className="p-2 text-center">
+                                  {formatCurrency(filteredData[0]?.commissionTotal || 0)}
+                               </td>
+                            </tr>
+                         )}
                       </tfoot>
                    </table>
                </div>

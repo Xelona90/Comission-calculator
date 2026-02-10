@@ -122,6 +122,7 @@ export const aggregateData = (
       commissionTarget: 0,
       commissionBeta: 0,
       commissionOther: 0,
+      commissionTotal: 0,
       totalCommission: 0
     });
   });
@@ -204,11 +205,19 @@ export const aggregateData = (
         const targetRule = profile.rules.find(rule => rule.category === SalesCategory.TARGET);
         const betaRule = profile.rules.find(rule => rule.category === SalesCategory.BETA);
         const otherRule = profile.rules.find(rule => rule.category === SalesCategory.OTHER);
+        const totalRule = profile.rules.find(rule => rule.category === SalesCategory.TOTAL);
 
         r.commissionTarget = calculateAmount(netTarget, targetRule?.tiers || []);
         r.commissionBeta = calculateAmount(netBeta, betaRule?.tiers || []);
         r.commissionOther = calculateAmount(netOther, otherRule?.tiers || []);
-        r.totalCommission = (r.commissionTarget || 0) + (r.commissionBeta || 0) + (r.commissionOther || 0);
+        
+        // Calculate Bonus on Total Volume
+        r.commissionTotal = calculateAmount(r.totalNet, totalRule?.tiers || []);
+
+        r.totalCommission = (r.commissionTarget || 0) + 
+                            (r.commissionBeta || 0) + 
+                            (r.commissionOther || 0) + 
+                            (r.commissionTotal || 0);
     }
 
     return r;
@@ -237,6 +246,8 @@ export const calculateManagerCommissions = (
             }
         });
 
+        const teamTotalNet = teamTarget + teamBeta + teamOther;
+
         // Calculate Commission based on Manager's Profile
         const profile = profiles.find(p => p.id === mgr.profileId);
         let totalComm = 0;
@@ -245,10 +256,12 @@ export const calculateManagerCommissions = (
             const targetRule = profile.rules.find(rule => rule.category === SalesCategory.TARGET);
             const betaRule = profile.rules.find(rule => rule.category === SalesCategory.BETA);
             const otherRule = profile.rules.find(rule => rule.category === SalesCategory.OTHER);
+            const totalRule = profile.rules.find(rule => rule.category === SalesCategory.TOTAL);
 
             totalComm += calculateAmount(teamTarget, targetRule?.tiers || []);
             totalComm += calculateAmount(teamBeta, betaRule?.tiers || []);
             totalComm += calculateAmount(teamOther, otherRule?.tiers || []);
+            totalComm += calculateAmount(teamTotalNet, totalRule?.tiers || []);
         }
 
         return {
