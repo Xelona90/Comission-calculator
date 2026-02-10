@@ -14,7 +14,12 @@
     "@google/genai": "^1.40.0",
     "react": "^19.2.4",
     "recharts": "^3.7.0",
-    "xlsx": "0.18.5"
+    "xlsx": "0.18.5",
+    "url": "^0.11.4",
+    "fs": "^0.0.1-security",
+    "express": "^5.2.1",
+    "path": "^0.12.7",
+    "pg": "^8.18.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
