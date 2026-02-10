@@ -47,16 +47,25 @@ const calculateAmount = (amount: number, tiers: any[]): number => {
   }
 };
 
-// Helper to extract the real beta rep name from the string like "Name (مشتری TargetName)"
+// Helper to extract the real beta rep name from the string like "Name (مشتری TargetName)" or "گروه بتا (TargetName)"
 export const extractBetaRepName = (rawSubgroup: string): string => {
   if (!rawSubgroup) return '';
   const normalized = rawSubgroup.trim();
-  // Regex to match (مشتری Name) or (مشتری: Name)
-  // Captures the text after "مشتری" inside parentheses
-  const match = normalized.match(/\(\s*مشتری\s*[:]?\s*(.+?)\s*\)/);
+  
+  // Regex Explanation:
+  // \(                  -> Match opening parenthesis
+  // \s*                 -> Match optional whitespace
+  // (?:مشتری\s*[:]?\s*)? -> Non-capturing group for optional "مشتری" or "مشتری:" prefix
+  // ([^)]+)             -> Capturing group 1: Capture anything that is NOT a closing parenthesis (The Name)
+  // \s*                 -> Match optional whitespace
+  // \)                  -> Match closing parenthesis
+  const match = normalized.match(/\(\s*(?:مشتری\s*[:]?\s*)?([^)]+)\s*\)/);
+  
   if (match && match[1]) {
     return match[1].trim();
   }
+
+  // Fallback: If the pattern doesn't match (e.g. no parentheses), return original
   return normalized;
 };
 
@@ -118,17 +127,24 @@ export const aggregateData = (
   });
 
   // 2. Goods Processing (Using the map which now includes beta resolutions)
+  // UPDATED PRIORITY: Beta -> Target -> Other
   goodsSales.forEach(good => {
     const customerInfo = customerMap.get(good.buyerName.trim());
     if (customerInfo) {
       const repStats = repData.get(customerInfo.rep);
       if (repStats) {
         const netAmount = good.netSales || 0; 
-        if (good.productCode && good.productCode.toUpperCase().startsWith('TG')) {
-          repStats.targetSales += netAmount;
-        } else if (customerInfo.isBeta) {
+
+        // Priority 1: Is the customer a Beta customer?
+        if (customerInfo.isBeta) {
           repStats.betaSales += netAmount;
-        } else {
+        } 
+        // Priority 2: Is the product a Target product (TG)?
+        else if (good.productCode && good.productCode.toUpperCase().startsWith('TG')) {
+          repStats.targetSales += netAmount;
+        } 
+        // Priority 3: Everything else
+        else {
           repStats.otherSales += netAmount;
         }
       }

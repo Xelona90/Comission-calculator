@@ -3,7 +3,8 @@ import React, { useState, useMemo } from 'react';
 import { AggregatedSalesData, ManagerSalesData, PersonSalesRow, GoodsSalesRow, BetaMapping, ExpenseRow } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, LabelList } from 'recharts';
 import { analyzeSalesData } from '../services/geminiService';
-import { Bot, RefreshCcw, FileText, Banknote, Users, Sparkles, Briefcase, Filter, Printer, Percent } from 'lucide-react';
+import { extractBetaRepName } from '../services/calculationService';
+import { Bot, RefreshCcw, FileText, Banknote, Users, Sparkles, Briefcase, Filter, Printer, Percent, Layers } from 'lucide-react';
 
 interface DashboardProps {
   data: AggregatedSalesData[];
@@ -31,11 +32,18 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [loadingAi, setLoadingAi] = useState(false);
   const [selectedRep, setSelectedRep] = useState<string>('all');
 
-  // Helper to resolve Rep for a customer
+  // Helper to resolve Rep for a customer (Synced with calculationService logic)
   const resolveRepName = (rawSubgroup: string, isBeta: boolean): string => {
     if (!isBeta) return rawSubgroup;
-    const mapping = betaMappings.find(m => m.betaSubgroup === rawSubgroup);
-    return mapping ? mapping.assignedRepName : rawSubgroup;
+    
+    // 1. Extract the name first (matches how keys are stored in betaMappings)
+    const extracted = extractBetaRepName(rawSubgroup);
+    
+    // 2. Find mapping based on extracted name
+    const mapping = betaMappings.find(m => m.betaSubgroup === extracted);
+    
+    // 3. Return mapped name, or extracted name if no mapping exists
+    return mapping ? mapping.assignedRepName : extracted;
   };
 
   // Filter Data Logic (Aggregated)
@@ -45,11 +53,13 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, [data, selectedRep]);
 
   // Customer Breakdown Logic (Active when a Rep is selected)
+  // UPDATED: Aggregates Beta customers under the extracted Beta Rep Name
   const customerBreakdown = useMemo(() => {
     if (selectedRep === 'all') return [];
 
-    const customers: Record<string, { 
+    const rows: Record<string, { 
       name: string, 
+      isBetaGroup: boolean,
       target: number, 
       beta: number, 
       other: number, 
@@ -57,64 +67,83 @@ const Dashboard: React.FC<DashboardProps> = ({
       deductions: number 
     }> = {};
 
-    // 1. Find all customers belonging to this Rep
+    // 1. Identify all customers belonging to this Rep
     const repCustomers = personSales.filter(p => {
        const rep = resolveRepName(p.subgroup, p.isBeta);
        return rep === selectedRep;
     });
     
-    // Create a map for quick lookup
-    const customerNames = new Set(repCustomers.map(c => c.customerName));
+    // Map customerName -> Row Key (Either customerName OR Extracted Beta Name)
+    const customerKeyMap = new Map<string, { key: string, isBeta: boolean }>();
+    
+    repCustomers.forEach(p => {
+        let key = p.customerName;
+        let isBeta = false;
+
+        if (p.isBeta && p.subgroup) {
+            // IF BETA: Aggregate by the extracted name (e.g., "علی حمزه پور")
+            key = extractBetaRepName(p.subgroup);
+            isBeta = true;
+        }
+
+        customerKeyMap.set(p.customerName, { key, isBeta });
+
+        // Initialize row if not exists
+        if (!rows[key]) {
+            rows[key] = { 
+                name: key, 
+                isBetaGroup: isBeta,
+                target: 0, 
+                beta: 0, 
+                other: 0, 
+                total: 0, 
+                deductions: 0 
+            };
+        }
+    });
 
     // 2. Iterate Goods to calculate breakdown
+    // UPDATED PRIORITY: Beta First -> Target -> Other
     goodsSales.forEach(good => {
-       if (customerNames.has(good.buyerName)) {
-           if (!customers[good.buyerName]) {
-               customers[good.buyerName] = { name: good.buyerName, target: 0, beta: 0, other: 0, total: 0, deductions: 0 };
-           }
-           
+       const mapping = customerKeyMap.get(good.buyerName);
+       if (mapping) {
+           const { key, isBeta } = mapping;
            const net = good.netSales || 0;
-           
-           if (good.productCode && good.productCode.toUpperCase().startsWith('TG')) {
-              customers[good.buyerName].target += net;
+
+           if (isBeta) {
+               rows[key].beta += net;
+           } else if (good.productCode && good.productCode.toUpperCase().startsWith('TG')) {
+               rows[key].target += net;
            } else {
-              // Check if the customer is Beta to classify non-TG goods
-              const pRecord = repCustomers.find(p => p.customerName === good.buyerName);
-              if (pRecord?.isBeta) {
-                 customers[good.buyerName].beta += net;
-              } else {
-                 customers[good.buyerName].other += net;
-              }
+               rows[key].other += net;
            }
-           customers[good.buyerName].total += net;
+           rows[key].total += net;
        }
     });
 
     // 3. Handle Expenses
     expenses.forEach(exp => {
-      if (exp.assignedCategory && customerNames.has(exp.executorName)) {
-         if (!customers[exp.executorName]) {
-             customers[exp.executorName] = { name: exp.executorName, target: 0, beta: 0, other: 0, total: 0, deductions: 0 };
+      if (exp.assignedCategory) {
+         const mapping = customerKeyMap.get(exp.executorName);
+         if (mapping) {
+             const { key } = mapping;
+             rows[key].deductions += exp.amount;
          }
-         customers[exp.executorName].deductions += exp.amount;
       }
     });
 
-    // Ensure all customers from personSales appear
+    // 4. Ensure totals from personSales are reflected if goods were missing/partial
     repCustomers.forEach(p => {
-        if (!customers[p.customerName]) {
-            customers[p.customerName] = { 
-                name: p.customerName, 
-                target: 0, 
-                beta: p.isBeta ? p.netSales : 0, 
-                other: !p.isBeta ? p.netSales : 0,
-                total: p.netSales,
-                deductions: 0
-            };
+        const { key, isBeta } = customerKeyMap.get(p.customerName)!;
+        // If row has 0 total but person has sales, dump it into beta/other
+        if (rows[key].total === 0 && p.netSales !== 0) {
+             if (isBeta) rows[key].beta += p.netSales;
+             else rows[key].other += p.netSales;
+             rows[key].total += p.netSales;
         }
     });
 
-    return Object.values(customers).sort((a,b) => b.total - a.total);
+    return Object.values(rows).sort((a,b) => b.total - a.total);
   }, [selectedRep, personSales, goodsSales, expenses, betaMappings]);
 
 
@@ -436,8 +465,12 @@ const Dashboard: React.FC<DashboardProps> = ({
 
                   {/* --- RENDER LOGIC: CUSTOMER BREAKDOWN --- */}
                   {selectedRep !== 'all' && customerBreakdown.map((row) => (
-                     <tr key={row.name} className="hover:bg-gray-50 transition-colors group text-xs">
-                        <td className="p-4 font-bold text-gray-800 sticky right-0 bg-white group-hover:bg-gray-50 shadow-sm truncate max-w-[200px]" title={row.name}>{row.name}</td>
+                     <tr key={row.name} className={`hover:bg-gray-50 transition-colors group text-xs ${row.isBetaGroup ? 'bg-pink-50/30' : ''}`}>
+                        <td className="p-4 font-bold text-gray-800 sticky right-0 bg-white group-hover:bg-gray-50 shadow-sm truncate max-w-[200px]" title={row.name}>
+                           {row.isBetaGroup && <span className="inline-block w-2 h-2 rounded-full bg-pink-500 ml-2"></span>}
+                           {row.name}
+                           {row.isBetaGroup && <span className="text-[10px] text-pink-500 mr-1">(گروه بتا)</span>}
+                        </td>
                         
                         <td className="p-4 text-gray-600 bg-blue-50/5 group-hover:bg-blue-50/20">{formatCurrency(row.target)}</td>
                         <td className="p-4 text-gray-300 bg-blue-50/5 group-hover:bg-blue-50/20">-</td>
@@ -601,7 +634,10 @@ const Dashboard: React.FC<DashboardProps> = ({
                       <tbody className="divide-y divide-gray-200">
                          {customerBreakdown.map((row, idx) => (
                             <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                               <td className="p-2 border-r border-gray-200 font-bold truncate max-w-[200px]">{row.name}</td>
+                               <td className="p-2 border-r border-gray-200 font-bold truncate max-w-[200px]">
+                                 {row.name}
+                                 {row.isBetaGroup && <span className="text-[10px] mr-1">(گروه بتا)</span>}
+                               </td>
                                <td className="p-2 border-r border-gray-200 text-center">{row.target > 0 ? formatCurrency(row.target) : '-'}</td>
                                <td className="p-2 border-r border-gray-200 text-center">{row.beta > 0 ? formatCurrency(row.beta) : '-'}</td>
                                <td className="p-2 border-r border-gray-200 text-center">{row.other > 0 ? formatCurrency(row.other) : '-'}</td>
