@@ -1,5 +1,5 @@
 
-import { CommissionProfile, Manager, RepSettings, BetaMapping } from '../types';
+import { CommissionProfile, Manager, RepSettings, BetaMapping, SavedReportMetadata, FullReportSnapshot } from '../types';
 
 export const saveConfiguration = async (
   profiles: CommissionProfile[],
@@ -81,5 +81,47 @@ export const loadConfiguration = async (): Promise<{
        repSettings: r ? JSON.parse(r) : null,
        betaMappings: b ? JSON.parse(b) : null
     };
+  }
+};
+
+// --- Report Functions ---
+
+export const fetchReportsList = async (): Promise<SavedReportMetadata[]> => {
+  try {
+    const response = await fetch('/api/reports');
+    if (response.ok) {
+      return await response.json();
+    }
+    return [];
+  } catch (error) {
+    console.error("Failed to fetch reports list:", error);
+    return [];
+  }
+};
+
+export const fetchReportDetail = async (id: number): Promise<FullReportSnapshot | null> => {
+  try {
+    const response = await fetch(`/api/reports/${id}`);
+    if (response.ok) {
+      return await response.json();
+    }
+    return null;
+  } catch (error) {
+    console.error("Failed to fetch report detail:", error);
+    return null;
+  }
+};
+
+export const saveReport = async (year: number, month: number, snapshotData: FullReportSnapshot): Promise<boolean> => {
+  try {
+    const response = await fetch('/api/reports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ year, month, snapshotData })
+    });
+    return response.ok;
+  } catch (error) {
+    console.error("Failed to save report:", error);
+    return false;
   }
 };

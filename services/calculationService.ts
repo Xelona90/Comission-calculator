@@ -10,7 +10,8 @@ import {
   RepSettings,
   Manager,
   ManagerSalesData,
-  BetaMapping
+  BetaMapping,
+  ManagerSubordinateDetail
 } from '../types';
 
 export const linkExpensesToReps = (expenses: ExpenseRow[], personSales: PersonSalesRow[]): ExpenseRow[] => {
@@ -243,15 +244,38 @@ export const calculateManagerCommissions = (
         let teamBeta = 0;
         let teamOther = 0;
         let teamDeductions = 0;
+        
+        const subordinatesDetails: ManagerSubordinateDetail[] = [];
 
         // Sum up subordinates
         mgr.subordinates.forEach(repName => {
             const repData = repsData.find(r => r.repName === repName);
             if (repData) {
-                teamTarget += (repData.targetSales - repData.targetDeductions);
-                teamBeta += (repData.betaSales - repData.betaDeductions);
-                teamOther += (repData.otherSales - repData.otherDeductions);
+                const rTargetNet = repData.targetSales - repData.targetDeductions;
+                const rBetaNet = repData.betaSales - repData.betaDeductions;
+                const rOtherNet = repData.otherSales - repData.otherDeductions;
+                
+                teamTarget += rTargetNet;
+                teamBeta += rBetaNet;
+                teamOther += rOtherNet;
                 teamDeductions += (repData.targetDeductions + repData.betaDeductions + repData.otherDeductions);
+
+                subordinatesDetails.push({
+                   repName: repName,
+                   targetNet: rTargetNet,
+                   betaNet: rBetaNet,
+                   otherNet: rOtherNet,
+                   totalNet: rTargetNet + rBetaNet + rOtherNet
+                });
+            } else {
+                // Rep exists in settings but had no sales in this file
+                subordinatesDetails.push({
+                   repName: repName,
+                   targetNet: 0,
+                   betaNet: 0,
+                   otherNet: 0,
+                   totalNet: 0
+                });
             }
         });
 
@@ -279,7 +303,8 @@ export const calculateManagerCommissions = (
             teamTotalBeta: teamBeta,
             teamTotalOther: teamOther,
             teamTotalDeductions: teamDeductions,
-            commission: totalComm
+            commission: totalComm,
+            subordinatesDetails: subordinatesDetails.sort((a,b) => b.totalNet - a.totalNet)
         };
     });
 };

@@ -86,6 +86,14 @@ export interface AggregatedSalesData {
   totalCommission?: number;
 }
 
+export interface ManagerSubordinateDetail {
+  repName: string;
+  targetNet: number;
+  betaNet: number;
+  otherNet: number;
+  totalNet: number;
+}
+
 export interface ManagerSalesData {
   managerName: string;
   teamTotalTarget: number;
@@ -93,6 +101,8 @@ export interface ManagerSalesData {
   teamTotalOther: number;
   teamTotalDeductions: number;
   commission: number;
+  // NEW: Detailed breakdown of the team
+  subordinatesDetails: ManagerSubordinateDetail[];
 }
 
 export interface ManualDeduction {
@@ -103,9 +113,28 @@ export interface ManualDeduction {
   description: string;
 }
 
+export interface SavedReportMetadata {
+  id: number;
+  year: number;
+  month: number;
+  created_at: string;
+}
+
+export interface FullReportSnapshot {
+  personSales: PersonSalesRow[];
+  goodsSales: GoodsSalesRow[];
+  expenses: ExpenseRow[];
+  manualDeductions: ManualDeduction[];
+  betaMappings: BetaMapping[];
+  // We save config snapshot too to ensure historical accuracy even if rules change later
+  profiles: CommissionProfile[];
+  managers: Manager[];
+  repSettings: RepSettings[];
+}
+
 export interface AppState {
   // Navigation State
-  currentView: 'process' | 'settings'; 
+  currentView: 'process' | 'settings' | 'history'; 
   processStep: number; // 1: Upload, 2: Beta Mapping, 3: Deductions, 4: Dashboard
 
   // Data State
@@ -119,4 +148,7 @@ export interface AppState {
   managers: Manager[];
   repSettings: RepSettings[];
   betaMappings: BetaMapping[]; // New mapping state
+  
+  // History State
+  savedReports: SavedReportMetadata[];
 }

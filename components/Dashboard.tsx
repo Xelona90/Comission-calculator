@@ -1,10 +1,9 @@
 
 import React, { useState, useMemo } from 'react';
-import { AggregatedSalesData, ManagerSalesData, PersonSalesRow, GoodsSalesRow, BetaMapping, ExpenseRow } from '../types';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, LabelList } from 'recharts';
+import { AggregatedSalesData, ManagerSalesData, PersonSalesRow, GoodsSalesRow, BetaMapping, ExpenseRow, SalesCategory } from '../types';
 import { analyzeSalesData } from '../services/geminiService';
 import { extractBetaRepName } from '../services/calculationService';
-import { Bot, RefreshCcw, FileText, Banknote, Users, Sparkles, Briefcase, Filter, Printer, Percent, Layers } from 'lucide-react';
+import { Bot, RefreshCcw, FileText, Banknote, Users, Sparkles, Briefcase, Filter, Printer, Percent, Save, Check, X, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface DashboardProps {
   data: AggregatedSalesData[];
@@ -13,6 +12,7 @@ interface DashboardProps {
   goodsSales?: GoodsSalesRow[];
   betaMappings?: BetaMapping[];
   expenses?: ExpenseRow[];
+  onSaveReport?: (year: number, month: number) => Promise<boolean>; // New Prop
 }
 
 const formatCurrency = (val: number) => {
@@ -26,11 +26,19 @@ const Dashboard: React.FC<DashboardProps> = ({
   personSales = [], 
   goodsSales = [], 
   betaMappings = [],
-  expenses = []
+  expenses = [],
+  onSaveReport
 }) => {
   const [aiAnalysis, setAiAnalysis] = useState<string>('');
   const [loadingAi, setLoadingAi] = useState(false);
   const [selectedRep, setSelectedRep] = useState<string>('all');
+  const [expandedManager, setExpandedManager] = useState<string | null>(null);
+  
+  // Save Modal State
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [saveYear, setSaveYear] = useState(1403);
+  const [saveMonth, setSaveMonth] = useState(1);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Helper to resolve Rep for a customer (Synced with calculationService logic)
   const resolveRepName = (rawSubgroup: string, isBeta: boolean): string => {
@@ -61,10 +69,13 @@ const Dashboard: React.FC<DashboardProps> = ({
       name: string, 
       isBetaGroup: boolean,
       target: number, 
+      targetDeductions: number,
       beta: number, 
+      betaDeductions: number,
       other: number, 
+      otherDeductions: number,
       total: number,
-      deductions: number 
+      totalDeductions: number 
     }> = {};
 
     // 1. Identify all customers belonging to this Rep
@@ -94,10 +105,13 @@ const Dashboard: React.FC<DashboardProps> = ({
                 name: key, 
                 isBetaGroup: isBeta,
                 target: 0, 
+                targetDeductions: 0,
                 beta: 0, 
+                betaDeductions: 0,
                 other: 0, 
+                otherDeductions: 0,
                 total: 0, 
-                deductions: 0 
+                totalDeductions: 0 
             };
         }
     });
@@ -121,13 +135,23 @@ const Dashboard: React.FC<DashboardProps> = ({
        }
     });
 
-    // 3. Handle Expenses
+    // 3. Handle Expenses - Fix: Split by category
     expenses.forEach(exp => {
       if (exp.assignedCategory) {
          const mapping = customerKeyMap.get(exp.executorName);
          if (mapping) {
              const { key } = mapping;
-             rows[key].deductions += exp.amount;
+             const amt = exp.amount || 0;
+
+             if (exp.assignedCategory === SalesCategory.TARGET) {
+                rows[key].targetDeductions += amt;
+             } else if (exp.assignedCategory === SalesCategory.BETA) {
+                rows[key].betaDeductions += amt;
+             } else if (exp.assignedCategory === SalesCategory.OTHER) {
+                rows[key].otherDeductions += amt;
+             }
+             
+             rows[key].totalDeductions += amt;
          }
       }
     });
@@ -145,26 +169,6 @@ const Dashboard: React.FC<DashboardProps> = ({
 
     return Object.values(rows).sort((a,b) => b.total - a.total);
   }, [selectedRep, personSales, goodsSales, expenses, betaMappings]);
-
-
-  // Chart Data Preparation
-  const chartData = useMemo(() => {
-    if (selectedRep === 'all') {
-      return filteredData.map(d => ({
-        name: d.repName,
-        value: d.totalNet,
-        fill: '#3b82f6' 
-      })).sort((a, b) => b.value - a.value); 
-    } else {
-      const rep = filteredData[0];
-      if (!rep) return [];
-      return [
-        { name: 'تارگت (TG)', value: rep.targetSales, fill: '#3b82f6' },
-        { name: 'بتا (Beta)', value: rep.betaSales, fill: '#ec4899' },
-        { name: 'سایر (Other)', value: rep.otherSales, fill: '#10b981' }
-      ];
-    }
-  }, [filteredData, selectedRep]);
 
   // Totals based on filtered data
   const totalNetSales = filteredData.reduce((acc, curr) => acc + curr.totalNet, 0);
@@ -211,6 +215,20 @@ const Dashboard: React.FC<DashboardProps> = ({
   const handlePrint = () => {
     window.print();
   };
+  
+  const handleSaveClick = async () => {
+     if (onSaveReport) {
+        setIsSaving(true);
+        const success = await onSaveReport(saveYear, saveMonth);
+        setIsSaving(false);
+        if (success) {
+           setShowSaveModal(false);
+           alert('گزارش با موفقیت در پایگاه داده ذخیره شد.');
+        } else {
+           alert('خطا در ذخیره گزارش.');
+        }
+     }
+  };
 
   if (!data || data.length === 0) {
     return (
@@ -224,8 +242,62 @@ const Dashboard: React.FC<DashboardProps> = ({
   const printDate = new Date().toLocaleDateString('fa-IR');
 
   return (
-    <div className="space-y-8 animate-fade-in text-gray-900">
+    <div className="space-y-8 animate-fade-in text-gray-900 relative">
       
+      {/* Save Report Modal */}
+      {showSaveModal && (
+         <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden animate-fade-in-up">
+               <div className="bg-blue-600 p-4 text-white flex justify-between items-center">
+                  <h3 className="font-bold flex items-center gap-2"><Save size={18}/> ذخیره گزارش نهایی</h3>
+                  <button onClick={() => setShowSaveModal(false)} className="hover:bg-blue-700 p-1 rounded-full"><X size={18}/></button>
+               </div>
+               <div className="p-6 space-y-4">
+                  <div>
+                     <label className="block text-sm font-bold text-gray-700 mb-1">سال</label>
+                     <input 
+                        type="number" 
+                        value={saveYear} 
+                        onChange={(e) => setSaveYear(Number(e.target.value))}
+                        className="w-full border border-gray-300 rounded-lg p-2 text-center font-mono font-bold" 
+                     />
+                  </div>
+                  <div>
+                     <label className="block text-sm font-bold text-gray-700 mb-1">ماه</label>
+                     <select 
+                        value={saveMonth} 
+                        onChange={(e) => setSaveMonth(Number(e.target.value))}
+                        className="w-full border border-gray-300 rounded-lg p-2 text-center font-bold"
+                     >
+                        <option value={1}>فروردین</option>
+                        <option value={2}>اردیبهشت</option>
+                        <option value={3}>خرداد</option>
+                        <option value={4}>تیر</option>
+                        <option value={5}>مرداد</option>
+                        <option value={6}>شهریور</option>
+                        <option value={7}>مهر</option>
+                        <option value={8}>آبان</option>
+                        <option value={9}>آذر</option>
+                        <option value={10}>دی</option>
+                        <option value={11}>بهمن</option>
+                        <option value={12}>اسفند</option>
+                     </select>
+                  </div>
+                  <div className="pt-2">
+                     <button 
+                        onClick={handleSaveClick}
+                        disabled={isSaving}
+                        className="w-full bg-green-600 text-white py-2.5 rounded-lg font-bold hover:bg-green-700 transition flex items-center justify-center gap-2 disabled:opacity-50"
+                     >
+                        {isSaving ? <RefreshCcw className="animate-spin" size={18}/> : <Check size={18}/>}
+                        {isSaving ? 'در حال ذخیره...' : 'تایید و ذخیره'}
+                     </button>
+                  </div>
+               </div>
+            </div>
+         </div>
+      )}
+
       {/* --- HEADER: FILTER & PRINT ACTIONS (HIDDEN ON PRINT) --- */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100 print:hidden">
          <div className="flex items-center gap-4 w-full md:w-auto">
@@ -245,13 +317,24 @@ const Dashboard: React.FC<DashboardProps> = ({
             </select>
          </div>
 
-         <button 
-            onClick={handlePrint}
-            className="flex items-center gap-2 bg-slate-800 text-white px-6 py-2 rounded-lg hover:bg-slate-900 shadow-lg shadow-slate-200 transition font-bold"
-         >
-            <Printer size={18} />
-            چاپ گزارش (A4)
-         </button>
+         <div className="flex items-center gap-3">
+             {onSaveReport && (
+                <button 
+                  onClick={() => setShowSaveModal(true)}
+                  className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 shadow-md shadow-emerald-100 transition font-bold"
+                >
+                  <Save size={18} />
+                  ذخیره در سیستم
+                </button>
+             )}
+             <button 
+                onClick={handlePrint}
+                className="flex items-center gap-2 bg-slate-800 text-white px-6 py-2 rounded-lg hover:bg-slate-900 shadow-lg shadow-slate-200 transition font-bold"
+             >
+                <Printer size={18} />
+                چاپ گزارش (A4)
+             </button>
+         </div>
       </div>
 
       {/* --- SCREEN CONTENT (HIDDEN ON PRINT) --- */}
@@ -335,70 +418,82 @@ const Dashboard: React.FC<DashboardProps> = ({
             <div className="bg-white rounded-xl shadow-sm border border-purple-100 overflow-hidden mb-8">
                <div className="p-4 bg-purple-50 border-b border-purple-100 flex items-center gap-2">
                   <Briefcase className="text-purple-600" size={20} />
-                  <h3 className="text-lg font-bold text-purple-900">پورسانت مدیران فروش</h3>
+                  <h3 className="text-lg font-bold text-purple-900">عملکرد مدیران فروش و سرپرستان (بر اساس فروش تیم)</h3>
                </div>
                <div className="overflow-x-auto">
                   <table className="w-full text-right text-sm">
                      <thead className="bg-gray-50 text-gray-600">
                         <tr>
                            <th className="p-4">نام مدیر</th>
-                           <th className="p-4">مجموع فروش تیم (تارگت)</th>
-                           <th className="p-4">مجموع فروش تیم (بتا)</th>
-                           <th className="p-4">مجموع فروش تیم (سایر)</th>
-                           <th className="p-4 text-red-500">مجموع کسورات تیم</th>
-                           <th className="p-4 text-purple-700 font-bold text-lg">پورسانت نهایی</th>
+                           <th className="p-4">فروش تیم (تارگت)</th>
+                           <th className="p-4">فروش تیم (بتا)</th>
+                           <th className="p-4">فروش تیم (سایر)</th>
+                           <th className="p-4 text-red-500">کسورات تیم</th>
+                           <th className="p-4 text-purple-700 font-bold text-lg">پورسانت مدیر</th>
+                           <th className="p-4 text-center">جزئیات</th>
                         </tr>
                      </thead>
                      <tbody className="divide-y divide-gray-100">
                         {managersData.map((mgr, idx) => (
-                           <tr key={idx} className="hover:bg-purple-50/30">
+                           <React.Fragment key={idx}>
+                           <tr className={`hover:bg-purple-50/30 transition-colors ${expandedManager === mgr.managerName ? 'bg-purple-50/50' : ''}`}>
                               <td className="p-4 font-bold">{mgr.managerName}</td>
                               <td className="p-4">{formatCurrency(mgr.teamTotalTarget)}</td>
                               <td className="p-4">{formatCurrency(mgr.teamTotalBeta)}</td>
                               <td className="p-4">{formatCurrency(mgr.teamTotalOther)}</td>
                               <td className="p-4 text-red-500">{formatCurrency(mgr.teamTotalDeductions)}</td>
                               <td className="p-4 font-black text-purple-700 text-lg">{formatCurrency(mgr.commission)}</td>
+                              <td className="p-4 text-center">
+                                 <button 
+                                    onClick={() => setExpandedManager(expandedManager === mgr.managerName ? null : mgr.managerName)}
+                                    className="p-1 hover:bg-purple-100 rounded-full text-purple-600 transition"
+                                 >
+                                    {expandedManager === mgr.managerName ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}
+                                 </button>
+                              </td>
                            </tr>
+                           {/* Expanded Detail Row */}
+                           {expandedManager === mgr.managerName && (
+                              <tr className="bg-gray-50/50">
+                                 <td colSpan={7} className="p-4 animate-fade-in">
+                                    <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
+                                       <h5 className="font-bold text-sm text-gray-600 mb-2 border-b border-gray-100 pb-2 flex items-center gap-2">
+                                          <Users size={14}/>
+                                          ریز عملکرد زیرمجموعه:
+                                       </h5>
+                                       <table className="w-full text-xs text-right">
+                                          <thead className="bg-gray-100 text-gray-500">
+                                             <tr>
+                                                <th className="p-2">نام کارشناس زیرمجموعه</th>
+                                                <th className="p-2">خالص تارگت</th>
+                                                <th className="p-2">خالص بتا</th>
+                                                <th className="p-2">خالص سایر</th>
+                                                <th className="p-2">جمع خالص</th>
+                                             </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-gray-100">
+                                             {mgr.subordinatesDetails.map((sub, sIdx) => (
+                                                <tr key={sIdx}>
+                                                   <td className="p-2 font-medium">{sub.repName}</td>
+                                                   <td className="p-2 text-gray-600">{formatCurrency(sub.targetNet)}</td>
+                                                   <td className="p-2 text-gray-600">{formatCurrency(sub.betaNet)}</td>
+                                                   <td className="p-2 text-gray-600">{formatCurrency(sub.otherNet)}</td>
+                                                   <td className="p-2 font-bold text-gray-800">{formatCurrency(sub.totalNet)}</td>
+                                                </tr>
+                                             ))}
+                                          </tbody>
+                                       </table>
+                                    </div>
+                                 </td>
+                              </tr>
+                           )}
+                           </React.Fragment>
                         ))}
                      </tbody>
                   </table>
                </div>
             </div>
          )}
-
-         {/* Charts */}
-         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 h-96 flex flex-col">
-            <h3 className="text-lg font-bold text-gray-800 mb-6 shrink-0 border-r-4 border-blue-500 pr-3 flex items-center justify-between">
-               <span>
-                 {selectedRep === 'all' ? 'مقایسه عملکرد کارشناسان (فروش کل)' : `ترکیب فروش کارشناس: ${selectedRep}`}
-               </span>
-               {selectedRep !== 'all' && <span className="text-xs font-normal text-gray-400">تفکیک بر اساس دسته‌بندی کالا</span>}
-            </h3>
-            <div className="w-full flex-1 min-h-0 text-xs">
-               <ResponsiveContainer width="100%" height="100%">
-               <BarChart
-                  data={chartData}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-               >
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                  <XAxis dataKey="name" tick={{fill: '#4b5563', fontWeight: 500}} axisLine={false} tickLine={false} dy={10} />
-                  <YAxis tickFormatter={(val) => new Intl.NumberFormat('en-US', { notation: 'compact' }).format(val)} tick={{fill: '#9ca3af'}} axisLine={false} tickLine={false} />
-                  <Tooltip 
-                     formatter={(value: number) => formatCurrency(value)} 
-                     contentStyle={{ backgroundColor: '#fff', borderColor: '#e5e7eb', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', color: '#111827' }}
-                     itemStyle={{ color: '#111827', fontWeight: 600 }}
-                     cursor={{fill: '#f9fafb'}}
-                  />
-                  <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="circle" />
-                  <Bar dataKey="value" name="مبلغ فروش" radius={[4, 4, 0, 0]}>
-                    {chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Bar>
-               </BarChart>
-               </ResponsiveContainer>
-            </div>
-         </div>
 
          {/* Detailed Table (Adaptive) */}
          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -476,15 +571,15 @@ const Dashboard: React.FC<DashboardProps> = ({
                         </td>
                         
                         <td className="p-4 text-gray-600 bg-blue-50/5 group-hover:bg-blue-50/20">{formatCurrency(row.target)}</td>
-                        <td className="p-4 text-gray-300 bg-blue-50/5 group-hover:bg-blue-50/20">-</td>
+                        <td className="p-4 text-red-400 bg-blue-50/5 group-hover:bg-blue-50/20">{row.targetDeductions > 0 ? `(${formatCurrency(row.targetDeductions)})` : '-'}</td>
                         <td className="p-4 text-gray-300 bg-blue-50/20 group-hover:bg-blue-50/40 border-l border-blue-100">-</td>
 
                         <td className="p-4 text-gray-600 bg-pink-50/5 group-hover:bg-pink-50/20">{formatCurrency(row.beta)}</td>
-                        <td className="p-4 text-gray-300 bg-pink-50/5 group-hover:bg-pink-50/20">-</td>
+                        <td className="p-4 text-red-400 bg-pink-50/5 group-hover:bg-pink-50/20">{row.betaDeductions > 0 ? `(${formatCurrency(row.betaDeductions)})` : '-'}</td>
                         <td className="p-4 text-gray-300 bg-pink-50/20 group-hover:bg-pink-50/40 border-l border-pink-100">-</td>
 
                         <td className="p-4 text-gray-600 bg-emerald-50/5 group-hover:bg-emerald-50/20">{formatCurrency(row.other)}</td>
-                        <td className="p-4 text-red-400 bg-emerald-50/5 group-hover:bg-emerald-50/20">{row.deductions > 0 ? `(${formatCurrency(row.deductions)})` : '-'}</td>
+                        <td className="p-4 text-red-400 bg-emerald-50/5 group-hover:bg-emerald-50/20">{row.otherDeductions > 0 ? `(${formatCurrency(row.otherDeductions)})` : '-'}</td>
                         <td className="p-4 text-gray-300 bg-emerald-50/20 group-hover:bg-emerald-50/40 border-l border-emerald-100">-</td>
 
                         <td className="p-4 text-gray-400 font-normal bg-gray-50 sticky left-0 group-hover:bg-gray-100 shadow-sm">-</td>
@@ -614,26 +709,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                   </div>
                </div>
 
-               {/* Chart Section */}
-               <div className="border border-gray-300 rounded-xl p-4 bg-white">
-                  <h3 className="text-sm font-bold text-gray-700 mb-4 border-b pb-2">نمودار ترکیب فروش (Target / Beta / Other)</h3>
-                  <div style={{ width: '100%', height: '200px' }}>
-                     <ResponsiveContainer>
-                        <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                           <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                           <XAxis type="number" hide />
-                           <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 12, fill: '#000', fontWeight: 'bold'}} />
-                           <Bar dataKey="value" barSize={24} radius={[0, 4, 4, 0]} isAnimationActive={false}>
-                              {chartData.map((entry, index) => (
-                                 <Cell key={`cell-${index}`} fill={entry.fill} />
-                              ))}
-                              <LabelList dataKey="value" position="right" formatter={(val: number) => formatCurrency(val)} fontSize={10} fill="#000" />
-                           </Bar>
-                        </BarChart>
-                     </ResponsiveContainer>
-                  </div>
-               </div>
-
                {/* Detailed Table */}
                <div className="border border-gray-300 rounded-xl overflow-hidden mt-4">
                    <div className="bg-gray-100 px-4 py-2 border-b border-gray-300 font-bold text-sm">ریز عملکرد به تفکیک خریداران</div>
@@ -658,7 +733,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                                <td className="p-2 border-r border-gray-200 text-center">{row.target > 0 ? formatCurrency(row.target) : '-'}</td>
                                <td className="p-2 border-r border-gray-200 text-center">{row.beta > 0 ? formatCurrency(row.beta) : '-'}</td>
                                <td className="p-2 border-r border-gray-200 text-center">{row.other > 0 ? formatCurrency(row.other) : '-'}</td>
-                               <td className="p-2 border-r border-gray-200 text-center text-red-600">{row.deductions > 0 ? formatCurrency(row.deductions) : '-'}</td>
+                               <td className="p-2 border-r border-gray-200 text-center text-red-600">{row.totalDeductions > 0 ? formatCurrency(row.totalDeductions) : '-'}</td>
                                <td className="p-2 text-center font-bold">{formatCurrency(row.total)}</td>
                             </tr>
                          ))}

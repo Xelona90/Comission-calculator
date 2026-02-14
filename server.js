@@ -14,7 +14,7 @@ const port = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors()); // Enable CORS to avoid cross-origin issues
-app.use(express.json());
+app.use(express.json({ limit: '50mb' })); // Increased limit for large snapshots
 
 // Database Connection
 const connectionString = process.env.DATABASE_URL;
@@ -190,6 +190,81 @@ app.post('/api/config', async (req, res) => {
     if (client) client.release();
   }
 });
+
+// GET Reports Metadata (List)
+app.get('/api/reports', async (req, res) => {
+  if (!connectionString) return res.status(503).json({ error: 'Database not configured' });
+  
+  let client;
+  try {
+    client = await pool.connect();
+    // Only fetch metadata, not the heavy snapshot_data
+    const result = await client.query(`
+      SELECT id, report_year as year, report_month as month, created_at 
+      FROM commission_reports 
+      ORDER BY report_year DESC, report_month DESC
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching reports list:', err);
+    res.status(500).json({ error: 'Failed to fetch reports' });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+// GET Specific Report Data
+app.get('/api/reports/:id', async (req, res) => {
+  if (!connectionString) return res.status(503).json({ error: 'Database not configured' });
+  
+  let client;
+  try {
+    client = await pool.connect();
+    const result = await client.query(`
+      SELECT snapshot_data 
+      FROM commission_reports 
+      WHERE id = $1
+    `, [req.params.id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+    
+    res.json(result.rows[0].snapshot_data);
+  } catch (err) {
+    console.error('Error fetching report detail:', err);
+    res.status(500).json({ error: 'Failed to fetch report data' });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+// POST Report (Save Snapshot)
+app.post('/api/reports', async (req, res) => {
+  const { year, month, snapshotData } = req.body;
+  if (!connectionString) return res.status(503).json({ error: 'Database not configured' });
+
+  let client;
+  try {
+    client = await pool.connect();
+    const snapshotJson = JSON.stringify(snapshotData);
+    
+    await client.query(`
+      INSERT INTO commission_reports (report_year, report_month, snapshot_data)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (report_year, report_month) 
+      DO UPDATE SET snapshot_data = EXCLUDED.snapshot_data, created_at = NOW()
+    `, [year, month, snapshotJson]);
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error saving report:', err);
+    res.status(500).json({ error: 'Failed to save report' });
+  } finally {
+    if (client) client.release();
+  }
+});
+
 
 // Serve frontend
 const distPath = path.join(__dirname, 'dist');
