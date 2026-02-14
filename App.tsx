@@ -1,16 +1,17 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { AppState, SalesCategory, ExpenseRow, ManualDeduction } from './types';
+import { AppState, SalesCategory, ExpenseRow, ManualDeduction, FullReportSnapshot } from './types';
 import { DEFAULT_COMMISSION_PROFILES } from './constants';
 import { parsePersonSales, parseGoodsSales, parseExpenses } from './services/csvParser';
 import { aggregateData, linkExpensesToReps, calculateManagerCommissions, extractBetaRepName } from './services/calculationService';
-import { loadConfiguration, saveConfiguration } from './services/dataService';
+import { loadConfiguration, saveConfiguration, saveReport, fetchReportsList, fetchReportDetail } from './services/dataService';
 import FileUpload from './components/FileUpload';
 import ExpenseManager from './components/ExpenseManager';
 import Dashboard from './components/Dashboard';
 import CommissionSetup from './components/CommissionSetup';
 import BetaManager from './components/BetaManager';
-import { Calculator, LayoutDashboard, Settings, FileSpreadsheet, Percent, ChevronLeft, ChevronRight, AlertCircle, AlertTriangle, Save, Database, Share2 } from 'lucide-react';
+import HistoryView from './components/HistoryView';
+import { Calculator, LayoutDashboard, Settings, FileSpreadsheet, Percent, ChevronLeft, ChevronRight, AlertCircle, AlertTriangle, Save, Database, Share2, FileClock } from 'lucide-react';
 
 const App: React.FC = () => {
   const [state, setState] = useState<AppState>({
@@ -23,7 +24,8 @@ const App: React.FC = () => {
     commissionProfiles: DEFAULT_COMMISSION_PROFILES,
     managers: [],
     repSettings: [],
-    betaMappings: []
+    betaMappings: [],
+    savedReports: []
   });
 
   const [isSaving, setIsSaving] = useState(false);
@@ -33,12 +35,15 @@ const App: React.FC = () => {
   useEffect(() => {
     const initData = async () => {
       const { profiles, managers, repSettings, betaMappings } = await loadConfiguration();
+      const reports = await fetchReportsList();
+      
       setState(prev => ({
         ...prev,
         commissionProfiles: profiles || DEFAULT_COMMISSION_PROFILES,
         managers: managers || [],
         repSettings: repSettings || [],
-        betaMappings: betaMappings || []
+        betaMappings: betaMappings || [],
+        savedReports: reports || []
       }));
       setDataLoaded(true);
     };
@@ -69,6 +74,46 @@ const App: React.FC = () => {
     if(success) {
       alert('تنظیمات با موفقیت در پایگاه داده ذخیره شد.');
     }
+  };
+  
+  const handleSaveReport = async (year: number, month: number): Promise<boolean> => {
+     const snapshot: FullReportSnapshot = {
+        personSales: state.personSales,
+        goodsSales: state.goodsSales,
+        expenses: state.expenses,
+        manualDeductions: state.manualDeductions,
+        betaMappings: state.betaMappings,
+        profiles: state.commissionProfiles,
+        managers: state.managers,
+        repSettings: state.repSettings
+     };
+
+     const success = await saveReport(year, month, snapshot);
+     if (success) {
+        const reports = await fetchReportsList();
+        setState(s => ({ ...s, savedReports: reports }));
+     }
+     return success;
+  };
+
+  const handleLoadReport = async (reportId: number) => {
+     const snapshot = await fetchReportDetail(reportId);
+     if (snapshot) {
+        setState(s => ({
+           ...s,
+           personSales: snapshot.personSales,
+           goodsSales: snapshot.goodsSales,
+           expenses: snapshot.expenses,
+           manualDeductions: snapshot.manualDeductions,
+           betaMappings: snapshot.betaMappings,
+           commissionProfiles: snapshot.profiles || s.commissionProfiles,
+           managers: snapshot.managers || s.managers,
+           repSettings: snapshot.repSettings || s.repSettings,
+           // Switch view to Dashboard immediately
+           currentView: 'process',
+           processStep: 4 
+        }));
+     }
   };
 
   const handleParsePersonSales = (buffer: ArrayBuffer) => {
@@ -182,6 +227,14 @@ const App: React.FC = () => {
             </button>
             
             <button 
+               onClick={() => setState(s => ({...s, currentView: 'history'}))}
+               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${state.currentView === 'history' ? 'bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+            >
+               <FileClock size={20} />
+               سابقه گزارشات
+            </button>
+            
+            <button 
                onClick={() => setState(s => ({...s, currentView: 'settings'}))}
                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${state.currentView === 'settings' ? 'bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
             >
@@ -266,6 +319,7 @@ const App: React.FC = () => {
                            goodsSales={state.goodsSales}
                            betaMappings={state.betaMappings} 
                            expenses={state.expenses}
+                           onSaveReport={handleSaveReport}
                         />
                      </div>
                   )}
@@ -335,6 +389,14 @@ const App: React.FC = () => {
                   setRepSettings={(r) => setState(s => ({...s, repSettings: r}))}
                />
             </div>
+         )}
+
+         {/* -- VIEW 3: History -- */}
+         {state.currentView === 'history' && (
+            <HistoryView 
+               savedReports={state.savedReports} 
+               onLoadReport={handleLoadReport}
+            />
          )}
       </main>
     </div>

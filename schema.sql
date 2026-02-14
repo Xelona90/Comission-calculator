@@ -44,6 +44,18 @@ CREATE TABLE IF NOT EXISTS beta_mappings (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 6. جدول سابقه گزارشات پورسانت (NEW)
+-- ذخیره اسنپ‌شات کامل اطلاعات برای هر ماه
+CREATE TABLE IF NOT EXISTS commission_reports (
+    id SERIAL PRIMARY KEY,
+    report_year INT NOT NULL,
+    report_month INT NOT NULL,
+    snapshot_data JSONB NOT NULL, -- Stores { personSales, goodsSales, expenses, manualDeductions, ... }
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(report_year, report_month) -- Prevent duplicate reports for same period (overwrite logic handled in app)
+);
+
 -- Indexes for performance
 CREATE INDEX idx_managers_profile ON managers(profile_id);
 CREATE INDEX idx_rep_settings_profile ON rep_settings(profile_id);
+CREATE INDEX idx_commission_reports_date ON commission_reports(report_year, report_month);
